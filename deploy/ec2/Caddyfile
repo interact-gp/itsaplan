@@ -1,0 +1,7 @@
+{$APP_URL} {
+    reverse_proxy web:3001
+}
+
+{$API_URL} {
+    reverse_proxy api:3000
+}

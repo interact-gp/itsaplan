@@ -1,0 +1,38 @@
+services:
+  api:
+    image: ghcr.io/croffasia/itsaplan-api:1.0.0@sha256:54ac23b08709596d3783f1779089ebfa6a081886eb1732ea8ca200308096c438
+    ports: !reset []
+  web:
+    image: ghcr.io/croffasia/itsaplan-web:1.0.0@sha256:4ca487931e8012d057990fbb685a594676e0926378a2a7761153864e7db70eb4
+    ports: !reset []
+  worker:
+    image: ghcr.io/croffasia/itsaplan-worker:1.0.0@sha256:2faba71fb946e33752fd39456e1f368551782ea0a94a65ac4053d3c50a549410
+  bot:
+    image: ghcr.io/croffasia/itsaplan-bot:1.0.0@sha256:7b739f9e53dc98369d0bdeef0d32b4a62bb7a0c9044cc1ab1c029b1c56b2273c
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_URL: ${APP_URL:?set APP_URL}
+      API_URL: ${API_URL:?set API_URL}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./deploy/ec2/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  caddy-data:
+  caddy-config:
