@@ -64,6 +64,6 @@ For a failed initial deployment, restrict ingress and stop only this new stack w
 
 ## Remaining gates
 
-- Confirm Jay's Google account and source CIDR, then review restricted setup access for both ALB routes.
+- Apply the [reviewed setup-access plan](https://github.com/interact-gp/terraform/blob/main/itsaplan/SETUP_REVIEW.md) for `106.192.231.31/32` after exact-action approval; reverify the IP before applying. Confirm Jay's Google account during administrator setup.
 - Configure Google sign-in and verify Jay-only access with registration closed.
 - Complete off-host backups and the smoke/restore checks.
