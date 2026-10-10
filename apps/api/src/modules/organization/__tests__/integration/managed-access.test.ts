@@ -1,0 +1,336 @@
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import {
+  db,
+  organizationAccess,
+  organizationGroups,
+  scimGroup,
+  scimGroupMember,
+  setSetting,
+  teamMember,
+  user,
+} from '@repo/db';
+import { and, eq } from 'drizzle-orm';
+import { app, authedApi, apiKeyApi } from '#tests/helpers/app';
+import { signUpTestUser } from '#tests/helpers/auth';
+import { resetDb } from '#tests/helpers/db';
+import { createScimUser } from '#modules/scim/service';
+import { auth } from '@repo/auth';
+import { syncKeycloakAccess, setApplicationAccess } from '../../keycloak';
+
+async function grant(userId: string, rank: 'admin' | 'member') {
+  const [group] = await db
+    .insert(scimGroup)
+    .values({ displayName: organizationGroups[rank] })
+    .onConflictDoUpdate({
+      target: scimGroup.displayName,
+      set: { displayName: organizationGroups[rank] },
+    })
+    .returning();
+  await db.insert(scimGroupMember).values({ groupId: group!.id, userId }).onConflictDoNothing();
+  await setSetting('organization.lastSync', Date.now());
+}
+
+async function keyFor(userId: string) {
+  return (await auth.api.createApiKey({ body: { name: 'Managed regression', userId } })).key;
+}
+
+async function rpc(key: string, method: string, params = {}) {
+  return app.handle(
+    new Request('http://localhost/mcp', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${key}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    }),
+  );
+}
+
+async function listed(key: string) {
+  const response = await rpc(key, 'tools/list');
+  const body = await response.text();
+  const data = JSON.parse(body.slice(body.indexOf('data: ') + 6));
+  return data.result.tools.map((tool: { name: string }) => tool.name) as string[];
+}
+
+describe('managed organization access', () => {
+  beforeEach(async () => {
+    process.env.ITSAPLAN_MANAGED_ACCESS = 'false';
+    await resetDb();
+  });
+  afterEach(() => {
+    process.env.ITSAPLAN_MANAGED_ACCESS = 'false';
+  });
+
+  async function actors() {
+    await signUpTestUser();
+    const admin = await signUpTestUser({ email: 'admin@frnd.app' });
+    const member = await signUpTestUser({ email: 'member@frnd.app' });
+    await db.delete(teamMember);
+    process.env.ITSAPLAN_MANAGED_ACCESS = 'true';
+    await grant(admin.userId, 'admin');
+    await grant(member.userId, 'member');
+    return {
+      admin,
+      member,
+      adminApi: authedApi(admin.cookie),
+      memberApi: authedApi(member.cookie),
+    };
+  }
+
+  it('provisions an unassigned identity without creating a personal team', async () => {
+    const { adminApi } = await actors();
+    const person = await createScimUser({
+      email: 'new@frnd.app',
+      name: 'New Member',
+      active: true,
+      externalId: 'new-subject',
+    });
+    expect(await db.select().from(teamMember).where(eq(teamMember.userId, person.id))).toHaveLength(
+      0,
+    );
+    expect((await adminApi.teams.get()).data).toEqual([]);
+  });
+
+  it('restricts team creation to organization admins and delegates projects through a team role', async () => {
+    const { admin, member, adminApi, memberApi } = await actors();
+    expect((await memberApi.organization.users.get()).status).toBe(403);
+    await expect(
+      setApplicationAccess('admin@frnd.app', 'admin', member.userId),
+    ).rejects.toMatchObject({ status: 403 });
+    expect((await memberApi.teams.post({ name: 'Forbidden' })).status).toBe(403);
+    const memberKey = await keyFor(member.userId);
+    const initialTools = await listed(memberKey);
+    expect(initialTools).not.toContain('create_team');
+    expect(initialTools).not.toContain('set_application_access');
+    expect(initialTools).not.toContain('create_project');
+    expect(initialTools).not.toContain('create_team_project');
+    expect((await memberApi.projects.post({ key: 'NO', name: 'No team' })).status).toBe(400);
+    const created = await adminApi.teams.post({ name: 'Mail retention' });
+    expect(created.status).toBe(201);
+    const teamId = created.data!.id;
+    expect(await listed(await keyFor(admin.userId))).toContain('create_team_project');
+    await adminApi.teams({ teamId }).projects.post({ key: 'PRIVATE', name: 'Private project' });
+    const custom = await adminApi
+      .teams({ teamId })
+      .roles.post({ name: 'Project creator', permissions: { projects: { create: true } } });
+    expect(custom.status).toBe(201);
+    expect(
+      (
+        await adminApi
+          .teams({ teamId })
+          .members.post({ email: member.email, role: 'member', roleId: custom.data!.id })
+      ).status,
+    ).toBe(200);
+    expect((await memberApi.teams({ teamId }).projects.get()).data?.items).toEqual([]);
+    expect(await listed(memberKey)).toContain('create_team_project');
+    expect((await memberApi.projects({ projectKey: 'PRIVATE' }).get()).status).toBe(403);
+    expect(
+      (await memberApi.teams({ teamId }).projects.post({ key: 'MINE', name: 'My project' })).status,
+    ).toBe(201);
+    await adminApi
+      .teams({ teamId })
+      .members({ userId: member.userId })
+      .patch({ role: 'member', roleId: null });
+    expect(
+      (await memberApi.teams({ teamId }).projects.post({ key: 'NEXT', name: 'Denied' })).status,
+    ).toBe(403);
+    expect((await memberApi.projects({ projectKey: 'MINE' }).get()).status).toBe(200);
+  });
+
+  it('allows registered agents within their scope without granting human or administrator access', async () => {
+    const { adminApi, member, memberApi } = await actors();
+    const teamId = (await adminApi.teams.post({ name: 'Agent team' })).data!.id;
+    const project = (
+      await adminApi.teams({ teamId }).projects.post({ key: 'BOT', name: 'Agent project' })
+    ).data!;
+    await adminApi.teams({ teamId }).projects.post({ key: 'OTHER', name: 'Unassigned project' });
+    const created = await adminApi.teams({ teamId })['ai-agents'].post({
+      name: 'Managed bot',
+      username: 'managedbot',
+      kind: 'external',
+      projectIds: [project.id],
+    });
+    expect(created.status).toBe(201);
+    const { agent, apiKey } = created.data!;
+    const asAgent = apiKeyApi(apiKey!);
+    expect((await asAgent.projects({ projectKey: 'BOT' }).get()).status).toBe(200);
+    expect((await asAgent['agent-runs'].claim.post()).status).toBe(200);
+    expect((await asAgent.projects({ projectKey: 'OTHER' }).get()).status).toBe(403);
+    expect((await asAgent.organization.access.get()).data?.admin).toBe(false);
+    expect((await asAgent.organization.users.get()).status).toBe(403);
+    expect((await asAgent.teams.post({ name: 'Forbidden' })).status).toBe(403);
+    const tools = await listed(apiKey!);
+    expect(tools).toContain('get_project');
+    expect(tools).not.toContain('create_team');
+    expect(tools).not.toContain('set_application_access');
+    const response = await rpc(apiKey!, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectKey: 'BOT' },
+    });
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    const result = JSON.parse(body.slice(body.indexOf('data: ') + 6)).result;
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent.status).toBe(200);
+
+    await db.delete(scimGroupMember).where(eq(scimGroupMember.userId, member.userId));
+    expect((await memberApi.teams.get()).status).toBe(403);
+    expect((await rpc(await keyFor(member.userId), 'tools/list')).status).toBe(403);
+    await db.update(user).set({ active: false }).where(eq(user.id, agent.userId));
+    expect((await asAgent.projects({ projectKey: 'BOT' }).get()).status).toBe(401);
+    expect((await asAgent['agent-runs'].claim.post()).status).toBe(401);
+    expect((await rpc(apiKey!, 'tools/list')).status).toBe(401);
+  });
+
+  it('rejects custom roles from another team', async () => {
+    const { member, adminApi } = await actors();
+    const a = (await adminApi.teams.post({ name: 'A' })).data!.id;
+    const b = (await adminApi.teams.post({ name: 'B' })).data!.id;
+    const role = (
+      await adminApi
+        .teams({ teamId: b })
+        .roles.post({ name: 'Foreign', permissions: { projects: { create: true } } })
+    ).data!.id;
+    expect(
+      (
+        await adminApi
+          .teams({ teamId: a })
+          .members.post({ email: member.email, role: 'member', roleId: role })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('revokes existing cookies and MCP keys when entitlement is removed or stale', async () => {
+    const { member, memberApi } = await actors();
+    const key = await keyFor(member.userId);
+    expect((await rpc(key, 'tools/list')).status).toBe(200);
+    await db.delete(scimGroupMember).where(eq(scimGroupMember.userId, member.userId));
+    expect((await memberApi.teams.get()).status).toBe(403);
+    expect((await rpc(key, 'tools/list')).status).toBe(403);
+    await grant(member.userId, 'member');
+    await setSetting('organization.lastSync', Date.now() - 120_001);
+    expect((await memberApi.teams.get()).status).toBe(403);
+    expect((await rpc(key, 'tools/list')).status).toBe(403);
+    await grant(member.userId, 'member');
+    await db
+      .update(user)
+      .set({ active: false })
+      .where(and(eq(user.id, member.userId), eq(user.role, 'user')));
+    expect((await memberApi.teams.get()).status).toBe(401);
+  });
+  it('keeps an unverified legacy email collision unlinked and unauthorized', async () => {
+    await signUpTestUser();
+    const legacy = await signUpTestUser({ email: 'claimed@frnd.app' });
+    const key = await keyFor(legacy.userId);
+    const verified = await signUpTestUser({ email: 'verified@frnd.app' });
+    await db.update(user).set({ emailVerified: true }).where(eq(user.id, verified.userId));
+    process.env.ITSAPLAN_MANAGED_ACCESS = 'true';
+    const fixtureFetch = async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/token')) return Response.json({ access_token: 'fixture-token' });
+      if (path.includes('/group-by-path/')) return Response.json({ id: path.split('/').pop() });
+      if (path.endsWith('/groups/admin/members')) return Response.json([]);
+      if (path.endsWith('/groups/member/members'))
+        return Response.json([
+          { id: 'real-owner-sub', email: legacy.email, enabled: true, emailVerified: true },
+          { id: 'verified-sub', email: verified.email, enabled: true, emailVerified: true },
+        ]);
+      throw new Error('Unexpected fixture request');
+    };
+    const mock = spyOn(globalThis, 'fetch').mockImplementation(
+      Object.assign(fixtureFetch, { preconnect: globalThis.fetch.preconnect }),
+    );
+    try {
+      await syncKeycloakAccess();
+      expect(await organizationAccess(legacy.userId)).toEqual({ enabled: false, admin: false });
+      expect((await authedApi(legacy.cookie).teams.get()).status).toBe(403);
+      expect((await rpc(key, 'tools/list')).status).toBe(403);
+      await expect(
+        createScimUser({
+          email: legacy.email,
+          name: 'Real Owner',
+          active: true,
+          externalId: 'real-owner-sub',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await db.query.user.findFirst({ where: eq(user.id, legacy.userId) })).toMatchObject({
+        scimExternalId: null,
+        emailVerified: false,
+      });
+      expect(await db.query.user.findFirst({ where: eq(user.id, verified.userId) })).toMatchObject({
+        scimExternalId: 'verified-sub',
+      });
+      expect(await organizationAccess(verified.userId)).toEqual({ enabled: true, admin: false });
+      await db
+        .update(user)
+        .set({ scimExternalId: 'real-owner-sub' })
+        .where(eq(user.id, legacy.userId));
+      await grant(legacy.userId, 'member');
+      await setSetting('organization.subjects', ['real-owner-sub', 'verified-sub']);
+      await syncKeycloakAccess();
+      expect(await organizationAccess(legacy.userId)).toEqual({ enabled: false, admin: false });
+      expect((await authedApi(legacy.cookie).teams.get()).status).toBe(401);
+      expect((await rpc(key, 'tools/list')).status).toBe(401);
+      expect(await organizationAccess(verified.userId)).toEqual({ enabled: true, admin: false });
+    } finally {
+      mock.mockRestore();
+    }
+  });
+
+  it('reconciles Keycloak demotion, identity rename, and removal without changing resource memberships', async () => {
+    const { admin, member, adminApi } = await actors();
+    await db
+      .update(user)
+      .set({ scimExternalId: 'admin-sub', emailVerified: true })
+      .where(eq(user.id, admin.userId));
+    await db
+      .update(user)
+      .set({ scimExternalId: 'member-sub', emailVerified: true })
+      .where(eq(user.id, member.userId));
+    await setSetting('organization.subjects', ['admin-sub', 'member-sub']);
+    const teamId = (await adminApi.teams.post({ name: 'Preserved pod' })).data!.id;
+    await adminApi.teams({ teamId }).members.post({ email: member.email, role: 'member' });
+    const person = (id: string, email: string) => ({
+      id,
+      email,
+      enabled: true,
+      emailVerified: true,
+    });
+    let members = [person('admin-sub', admin.email), person('member-sub', 'renamed@frnd.app')];
+    const fixtureFetch = async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/token')) return Response.json({ access_token: 'fixture-token' });
+      if (path.includes('/group-by-path/')) return Response.json({ id: path.split('/').pop() });
+      if (path.endsWith('/groups/admin/members')) return Response.json([]);
+      if (path.endsWith('/groups/member/members')) return Response.json(members);
+      throw new Error('Unexpected fixture request');
+    };
+    const mock = spyOn(globalThis, 'fetch').mockImplementation(
+      Object.assign(fixtureFetch, { preconnect: globalThis.fetch.preconnect }),
+    );
+    try {
+      await syncKeycloakAccess();
+      expect(await organizationAccess(admin.userId)).toEqual({ enabled: true, admin: false });
+      const renamed = await db.query.user.findFirst({ where: eq(user.id, member.userId) });
+      expect(renamed).toMatchObject({
+        id: member.userId,
+        email: 'renamed@frnd.app',
+        scimExternalId: 'member-sub',
+      });
+      members = [person('admin-sub', admin.email)];
+      await syncKeycloakAccess();
+      expect(await organizationAccess(member.userId)).toEqual({ enabled: false, admin: false });
+      expect(
+        await db
+          .select()
+          .from(teamMember)
+          .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, member.userId))),
+      ).toHaveLength(1);
+    } finally {
+      mock.mockRestore();
+    }
+  });
+});

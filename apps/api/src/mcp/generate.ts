@@ -1,3 +1,4 @@
+import type { ProjectFeature } from '#shared/features';
 import type { Permission } from '#shared/guards';
 import type { McpApp } from './types';
 import { outputSchema, type McpOutputSchema } from './result';
@@ -44,6 +45,8 @@ export interface McpRouteTool {
   // `x-permission` on the route's detail. Absent on a route that asks only for
   // project membership.
   permission?: Permission;
+  access?: string;
+  feature?: ProjectFeature;
 }
 
 // Marks a route as an MCP tool. Spread into a route's `detail`:
@@ -164,6 +167,8 @@ function generateRouteTools(app: McpApp): McpRouteTool[] {
           description?: string;
           'x-mcp'?: { tool?: string; annotations?: McpToolAnnotations };
           'x-permission'?: Permission;
+          'x-access'?: string;
+          'x-feature'?: ProjectFeature;
         }
       | undefined;
     const tool = detail?.['x-mcp']?.tool;
@@ -182,6 +187,8 @@ function generateRouteTools(app: McpApp): McpRouteTool[] {
       inputSchema: mergeInputSchema(hooks, pathParams),
       outputSchema: outputSchema(hooks.response),
       permission: detail?.['x-permission'],
+      access: detail?.['x-access'],
+      feature: detail?.['x-feature'],
       // Every tool acts on this tracker's own data and reaches nothing outside it,
       // so openWorldHint is false throughout; the route may still override it.
       annotations: {

@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { organizationRoutes } from './modules/organization';
 import { HttpError, pgErrorCode } from './shared/lib';
 import { authContext } from './shared/auth-context';
 import { projectRoutes } from './modules/projects';
@@ -126,4 +127,5 @@ export const planner = new Elysia({ name: 'planner' })
   .use(syncRoutes)
   .use(linkPreviewRoutes)
   .use(settingsRoutes)
-  .use(godRoutes);
+  .use(godRoutes)
+  .use(organizationRoutes);

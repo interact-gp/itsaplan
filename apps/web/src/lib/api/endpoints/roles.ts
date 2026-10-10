@@ -6,6 +6,7 @@ import { pageQuery, type Page, type PageParams } from '@/lib/api/core/paging';
 export type PermissionAction = 'create' | 'edit' | 'read' | 'delete';
 
 export type PermissionResource =
+  | 'projects'
   | 'work_items'
   | 'initiatives'
   | 'cycles'

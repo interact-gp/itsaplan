@@ -1,0 +1,28 @@
+name: itsaplan-v1
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: itsaplan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: itsaplan_v1
+    ports: ['127.0.0.1:55432:5432']
+    volumes: ['postgres:/var/lib/postgresql/data']
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.5
+    command:
+      ['start-dev', '--http-port=18080', '--import-realm', '--features=admin-fine-grained-authz:v2']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?}
+    ports: ['127.0.0.1:18080:18080']
+    volumes:
+      - ../.local/v1/realm.json:/opt/keycloak/data/import/local.json:ro
+      - keycloak:/opt/keycloak/data
+  dynamodb:
+    image: amazon/dynamodb-local:3.1.0
+    command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb', '-inMemory']
+    ports: ['127.0.0.1:18000:8000']
+volumes:
+  postgres:
+  keycloak:

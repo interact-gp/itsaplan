@@ -520,5 +520,27 @@
     "projectsHint": "المشروع الجديد بيبدأ بالإعداد الافتراضي للنسخة.",
     "noProjects": "الفريق لسه مالوش مشاريع.",
     "projectToggleAria": "تبديل الوصول عبر MCP لـ {project}"
+  },
+  "managed": {
+    "applicationAccess": "Application access",
+    "loading": "Loading access…",
+    "adminOnly": "Only an organization admin can manage application access.",
+    "description": "Grant access to an existing company identity. Team and project assignments are managed separately.",
+    "companyEmail": "Company email",
+    "applicationRole": "Application role",
+    "member": "Member",
+    "orgAdmin": "Organization admin",
+    "revoke": "Revoke access",
+    "apply": "Apply access",
+    "updated": "Application access updated.",
+    "noAccess": "No access",
+    "defaultMember": "Default member",
+    "customTeamRole": "Custom team role",
+    "teamMemberEmail": "Team member email",
+    "addMember": "Add team member",
+    "added": "Team member added.",
+    "customRoleFor": "Custom team role for {name}",
+    "reviewAccess": "Review application access",
+    "reviewDescription": "Set {email} to {role}. Team and project memberships are preserved. Application access is required to use them."
   }
 }

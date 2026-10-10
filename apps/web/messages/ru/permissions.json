@@ -23,7 +23,8 @@
     "actions": "Действия",
     "webhooks": "Вебхуки",
     "note_boards": "Доски заметок",
-    "danger_zone": "Опасная зона"
+    "danger_zone": "Опасная зона",
+    "projects": "Projects in this team"
   },
   "actions": {
     "create": "Создание",

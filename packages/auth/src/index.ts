@@ -1,5 +1,12 @@
 import { randomInt } from 'node:crypto';
-import { db, defaultMemberPermissions } from '@repo/db';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+import {
+  db,
+  defaultMemberPermissions,
+  managedAccess,
+  organizationAccess,
+  hasApplicationAccess,
+} from '@repo/db';
 import { eq, sql, type SQL } from 'drizzle-orm';
 import { betterAuth } from 'better-auth';
 import { createAuthMiddleware, APIError } from 'better-auth/api';
@@ -115,6 +122,47 @@ const oidcOptions: GenericOAuthConfig = {
   pkce: true,
 };
 
+const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const managedUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
+  const issuer = process.env.ITSAPLAN_KEYCLOAK_ISSUER;
+  if (!issuer || !tokens.idToken) return null;
+  const config = await getOidcConfig();
+  const keys =
+    keySets.get(issuer) ?? createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`));
+  keySets.set(issuer, keys);
+  const { payload } = await jwtVerify(tokens.idToken, keys, {
+    issuer,
+    audience: config.clientId,
+    algorithms: ['RS256'],
+    requiredClaims: ['exp', 'iat', 'sub', 'iss', 'aud'],
+    maxTokenAge: '5m',
+  });
+  if (payload.azp !== undefined && payload.azp !== config.clientId) return null;
+  if (
+    typeof payload.sub !== 'string' ||
+    typeof payload.email !== 'string' ||
+    payload.email_verified !== true ||
+    !payload.email.toLowerCase().endsWith('@frnd.app')
+  )
+    return null;
+  const [person] = await db
+    .select({ id: schema.user.id, email: schema.user.email })
+    .from(schema.user)
+    .where(eq(schema.user.scimExternalId, payload.sub));
+  if (
+    !person ||
+    person.email.toLowerCase() !== payload.email.toLowerCase() ||
+    !(await organizationAccess(person.id)).enabled
+  )
+    return null;
+  return {
+    id: payload.sub,
+    email: payload.email.toLowerCase(),
+    name: typeof payload.name === 'string' ? payload.name : payload.email,
+    emailVerified: true,
+  };
+};
+
 // The exact value that has to be registered as a redirect URI with the identity
 // provider. god mode shows it so the owner can copy it instead of assembling it.
 export const OIDC_REDIRECT_URI = `${baseURL}/api/auth/oauth2/callback/${OIDC_PROVIDER_ID}`;
@@ -129,7 +177,8 @@ async function refreshOidcOptions(): Promise<boolean> {
     oidcOptions.clientSecret = config.clientSecret;
     oidcOptions.discoveryUrl = config.discoveryUrl;
     oidcOptions.scopes = config.scopes;
-    oidcOptions.pkce = config.pkce;
+    oidcOptions.pkce = managedAccess() || config.pkce;
+    oidcOptions.getUserInfo = managedAccess() ? managedUserInfo : undefined;
     return isOidcUsable(config);
   } catch (error) {
     console.error('[auth] could not read the OIDC credentials:', error);
@@ -265,7 +314,11 @@ const DAY_SEC = 24 * 60 * 60;
 export const API_KEY_DEFAULT_EXPIRES_IN_SEC = 90 * DAY_SEC;
 export const API_KEY_MAX_EXPIRES_IN_DAYS = 365;
 
+// Better Auth allows its environment flag to override telemetry.enabled.
+process.env.BETTER_AUTH_TELEMETRY = 'false';
+
 export const auth = betterAuth({
+  telemetry: { enabled: false },
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
 
@@ -517,6 +570,7 @@ export const auth = betterAuth({
         // also where the roles its projects assign live, so it starts with the
         // default one.
         after: async (created) => {
+          if (managedAccess()) return;
           const handle = typeof created.username === 'string' ? created.username : created.name;
           await db.transaction(async (tx) => {
             const [row] = await tx
@@ -542,6 +596,18 @@ export const auth = betterAuth({
         // passkey, Google and OIDC. Deactivation arrives over SCIM; apps/api refuses
         // the sessions that are already open.
         before: async (session) => {
+          if (managedAccess()) {
+            const [person] = await db
+              .select({ role: schema.user.role })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+            if (person?.role !== 'god' && !(await hasApplicationAccess(session.userId))) {
+              throw new APIError('FORBIDDEN', {
+                code: 'APPLICATION_ACCESS_DENIED',
+                message: 'Application access has not been granted',
+              });
+            }
+          }
           const rows = await db
             .select({ active: schema.user.active })
             .from(schema.user)

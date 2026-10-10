@@ -27,6 +27,7 @@ import {
   createTeam,
   renameTeam,
   setTeamMemberRole,
+  addTeamMember,
   removeTeamMember,
   leaveTeam,
 } from '@/lib/api/endpoints/teams';
@@ -161,14 +162,23 @@ export function useRenameTeam() {
   });
 }
 
-// The rank a member holds in the team, written by an owner or a manager. The whole
-// team subtree carries it — its member pages and the leads on its detail — and the
-// team list carries how many owners it has.
+export function useAddTeamMember(teamId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { email: string; role: TeamRole; roleId?: number | null }) =>
+      addTeamMember(teamId, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.team(teamId) });
+      void qc.invalidateQueries({ queryKey: qk.teams });
+    },
+  });
+}
+
 export function useSetTeamMemberRole(teamId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { userId: string; role: TeamRole }) =>
-      setTeamMemberRole(teamId, input.userId, input.role),
+    mutationFn: (input: { userId: string; role: TeamRole; roleId?: number | null }) =>
+      setTeamMemberRole(teamId, input.userId, input.role, input.roleId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.team(teamId) });
       void qc.invalidateQueries({ queryKey: qk.teams });

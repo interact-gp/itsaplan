@@ -9,6 +9,14 @@ export const SERVER_INSTRUCTIONS = `
 Itsaplan is a project tracker. A project holds issues, and defines its own columns
 (states), issue types, labels, custom fields, and members.
 
+## Tool discovery
+
+Use discover_tools with a short task description and optional teamId/projectId to
+find authorized planning tools and schemas. It does not execute actions. Include
+no secrets or project content: Jev receives the request and tool descriptions.
+Recommendations without a scope do not establish access to a particular project.
+Fallback recommendations are lexical matches and require checking the descriptions.
+
 ## Resolving ids
 
 An identifier a person writes is "KEY-42": the part before the dash is the

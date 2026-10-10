@@ -30,6 +30,7 @@ RUN bun install --frozen-lockfile --filter worker $INSTALL_FLAGS
 # does not clobber the copied dependencies.
 FROM base AS release
 ENV NODE_ENV=production
+ENV TELEMETRY_DISABLED=1 DO_NOT_TRACK=1
 COPY --from=install /app ./
 COPY . .
 

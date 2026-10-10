@@ -14,6 +14,7 @@ export const teamProjectParams = t.Object({ teamId: t.Numeric(), projectId: t.Nu
 export const teamMemberParams = t.Object({ teamId: t.Numeric(), userId: t.String() });
 
 export const setTeamMemberRoleBody = t.Object({
+  roleId: t.Optional(t.Nullable(t.Number())),
   role: t.Union([t.Literal('owner'), t.Literal('manager'), t.Literal('member')]),
 });
 
@@ -89,6 +90,7 @@ export const TeamMemberPageResponse = pageResponse(
     }),
     agentId: t.Nullable(t.Number({ description: 'The AI agent this bot user backs.' })),
     username: t.Nullable(t.String({ description: "An agent's mention handle." })),
+    roleId: t.Nullable(t.Number()),
     joinedAt: t.String(),
   }),
 );

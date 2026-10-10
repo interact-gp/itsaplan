@@ -1,5 +1,5 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { db, account } from '@repo/db';
+import { db, account, managedAccess } from '@repo/db';
 import { auth, OIDC_PROVIDER_ID } from '@repo/auth';
 import { groupDisplayNames } from './resource';
 import { syncEmbeddedGroups } from './service';
@@ -35,6 +35,7 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
 // swallowed rather than surfaced, since none of it should turn a successful sign-in
 // into a failed one.
 export async function syncOidcGroupsAfterCallback(response: Response): Promise<void> {
+  if (managedAccess()) return;
   try {
     const cookie = response.headers
       .getSetCookie()

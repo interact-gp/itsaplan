@@ -78,6 +78,7 @@ export interface TeamRow {
 // standing in the team is 'agent', and what it may do is the role each of its project
 // memberships carries.
 export interface TeamMemberRow {
+  roleId: number | null;
   userId: string;
   name: string;
   email: string;
@@ -89,8 +90,7 @@ export interface TeamMemberRow {
   joinedAt: string;
 }
 
-// A project the team owns. `isMember` is the caller's own access to it: a team
-// member sees every project of the team, but only opens the ones they belong to.
+// Team administrators can list projects without having project content access.
 export interface TeamProjectRow {
   id: number;
   key: string;
@@ -423,6 +423,7 @@ export async function listTeamMembers(
         email: user.email,
         image: user.image,
         role: teamMember.role,
+        roleId: teamMember.roleId,
         source: teamMember.source,
         agentId: aiAgent.id,
         username: aiAgent.username,
@@ -450,6 +451,7 @@ export async function listTeamMembers(
       email: m.email,
       image: m.image,
       role: m.role as TeamStanding,
+      roleId: m.roleId,
       source: m.source as MemberSource,
       agentId: m.agentId,
       username: m.username,
@@ -770,6 +772,7 @@ export async function setTeamMemberRole(
   actor: { userId: string; role: TeamStanding },
   userId: string,
   role: TeamRole,
+  roleId?: number | null,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.select({ id: team.id }).from(team).where(eq(team.id, teamId)).for('update');
@@ -784,9 +787,21 @@ export async function setTeamMemberRole(
     if (actorRole !== 'owner' && (role === 'owner' || current === 'owner')) {
       throw new HttpError(403, 'Only a team owner can grant or take the owner rank');
     }
+    if (roleId != null) {
+      const [custom] = await tx
+        .select({ id: teamRole.id })
+        .from(teamRole)
+        .where(and(eq(teamRole.id, roleId), eq(teamRole.teamId, teamId)))
+        .for('share');
+      if (!custom || role !== 'member')
+        throw new HttpError(400, 'A member role from this team is required');
+    }
     await tx
       .update(teamMember)
-      .set({ role })
+      .set({
+        role,
+        roleId: role === 'member' ? roleId : null,
+      })
       .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, userId)));
   });
 }

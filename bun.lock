@@ -192,6 +192,7 @@
         "@repo/mailer": "workspace:*",
         "better-auth": "1.6.27",
         "drizzle-orm": "^0.45.2",
+        "jose": "^6.2.1",
       },
       "devDependencies": {
         "@repo/eslint-config": "workspace:*",

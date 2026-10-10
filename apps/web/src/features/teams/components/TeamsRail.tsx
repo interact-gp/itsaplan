@@ -17,12 +17,15 @@ export default function TeamsRail({
   isPending,
   activeId,
   onCreate,
+  canManageAccess,
 }: {
   teams: Team[];
   isPending: boolean;
   activeId: number | null;
-  onCreate: () => void;
+  onCreate?: () => void;
+  canManageAccess: boolean;
 }) {
+  const tManaged = useTranslations('teams.managed');
   const t = useTranslations('teams.manage');
 
   return (
@@ -31,21 +34,28 @@ export default function TeamsRail({
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {t('teams')}
         </h2>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="ms-auto size-7 text-muted-foreground hover:text-foreground"
-              aria-label={t('newTeam')}
-              onClick={onCreate}
-            >
-              <Plus className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t('newTeam')}</TooltipContent>
-        </Tooltip>
+        {onCreate && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ms-auto size-7 text-muted-foreground hover:text-foreground"
+                aria-label={t('newTeam')}
+                onClick={onCreate}
+              >
+                <Plus className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('newTeam')}</TooltipContent>
+          </Tooltip>
+        )}
       </div>
+      {canManageAccess && (
+        <Link href="/account/access" className="block px-2 text-sm">
+          {tManaged('applicationAccess')}
+        </Link>
+      )}
 
       {isPending ? (
         <ListSkeleton rows={3} rowClassName="h-8" />

@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia';
-import { db } from '@repo/db';
+import { db, managedAccess, hasApplicationAccess } from '@repo/db';
 import { user as users } from '@repo/db/schema';
 import { eq } from 'drizzle-orm';
 import { auth, getSessionFromHeaders } from '@repo/auth';
@@ -39,6 +39,7 @@ export const authContext = new Elysia({ name: 'auth-context' }).resolve(
     const session = await getSessionFromHeaders(request.headers);
     if (session) {
       if (session.user.active === false) throw new HttpError(401, 'This account is deactivated');
+      await assertOrganizationAccess(session.user);
       return { user: session.user };
     }
     const mcpToken = getMcpOAuthToken(request);
@@ -50,6 +51,7 @@ export const authContext = new Elysia({ name: 'auth-context' }).resolve(
         const user = await db.query.user.findFirst({ where: eq(users.id, oauthSession.userId) });
         if (user) {
           if (user.active === false) throw new HttpError(401, 'This account is deactivated');
+          await assertOrganizationAccess(user);
           return { user: user as SessionUser };
         }
       }
@@ -59,3 +61,9 @@ export const authContext = new Elysia({ name: 'auth-context' }).resolve(
     throw new HttpError(401, 'Authentication required');
   },
 );
+
+async function assertOrganizationAccess(user: { id: string; role?: string | null }) {
+  if (managedAccess() && user.role !== 'god' && !(await hasApplicationAccess(user.id))) {
+    throw new HttpError(403, 'Application access has not been granted');
+  }
+}

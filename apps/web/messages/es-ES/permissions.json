@@ -23,7 +23,8 @@
     "actions": "Acciones",
     "webhooks": "Webhooks",
     "note_boards": "Tableros de notas",
-    "danger_zone": "Zona de riesgo"
+    "danger_zone": "Zona de riesgo",
+    "projects": "Projects in this team"
   },
   "actions": {
     "create": "Crear",

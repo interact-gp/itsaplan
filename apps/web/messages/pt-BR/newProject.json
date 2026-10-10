@@ -46,5 +46,8 @@
   "copyTitle": "Copiar projeto \"{name}\"",
   "create": "Criar projeto",
   "copyAction": "Copiar projeto",
-  "copyName": "{name} cópia"
+  "copyName": "{name} cópia",
+  "team": "Team",
+  "chooseTeam": "Choose a team",
+  "noTeamAccess": "Ask a team owner for permission to create projects."
 }
