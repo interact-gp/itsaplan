@@ -4,6 +4,7 @@ export interface OrganizationAccess {
   managed: boolean;
   enabled: boolean;
   admin: boolean;
+  globalAccess: boolean;
 }
 export const getOrganizationAccess = () => request<OrganizationAccess>('/organization/access');
 

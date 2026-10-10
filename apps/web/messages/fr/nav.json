@@ -40,5 +40,6 @@
     "automation": "Automatisation"
   },
   "godModeOwnerOnly": "Le God mode est réservé au propriétaire de l'instance.",
-  "project": "Projet"
+  "project": "Projet",
+  "godModeAdminOnly": "Instance administration is available to the instance owner and organization administrators."
 }

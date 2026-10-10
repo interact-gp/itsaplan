@@ -40,5 +40,6 @@
     "automation": "الأتمتة"
   },
   "godModeOwnerOnly": "وضع المشرف متاح لمالك النسخة بس.",
-  "project": "المشروع"
+  "project": "المشروع",
+  "godModeAdminOnly": "Instance administration is available to the instance owner and organization administrators."
 }

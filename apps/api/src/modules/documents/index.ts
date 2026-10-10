@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import { Elysia, t } from 'elysia';
 import { authContext } from '#shared/auth-context';
 import { assertPermission, requireUser } from '#shared/access';
@@ -96,7 +97,9 @@ function documentAssetDto(projectKey: string, documentId: number, asset: Documen
 }
 
 async function isProjectOwner(projectId: number, userId: string): Promise<boolean> {
-  return (await getMembership(projectId, userId)) === 'owner';
+  return (
+    (await isOrganizationAdmin(userId)) || (await getMembership(projectId, userId)) === 'owner'
+  );
 }
 
 export const documentRoutes = new Elysia({

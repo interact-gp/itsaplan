@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Braces, Server, Shield } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/api/endpoints/projects';
-import { useSession } from '@/lib/auth-client';
+import { useInstanceAdmin } from '@/hooks/useInstanceAdmin';
 import { apiDocsPath, godPath, mcpServerPath } from '@/utils/paths';
 import { GOD_SECTIONS } from '@/utils/godSections';
 import { useSettingsNavGroups } from '@/hooks/useSettingsNavGroups';
@@ -46,14 +45,7 @@ export default function AppSidebar({
   const disabled = !currentProjectKey;
   const projectId = projects.find((p) => p.key === currentProjectKey)?.id ?? null;
 
-  const { data: session } = useSession();
-  // The session store can already be filled by the time React hydrates, while the
-  // server rendered without it. Reading it only after mount keeps the server and
-  // the first client render identical, so the God mode entry does not break
-  // hydration.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const isGod = mounted && session?.user.role === 'god';
+  const { isAdmin } = useInstanceAdmin();
 
   // Settings mode is on whenever the route matches one of the settings nav items.
   // Members and the AI Team pages are not in those groups, so they keep the main
@@ -101,9 +93,7 @@ export default function AppSidebar({
                 active={onMcp}
                 disabled={disabled}
               />
-              {/* Instance administration, only for the owner account. The API
-                  enforces the same, so hiding it here is about noise, not access. */}
-              {isGod && (
+              {isAdmin && (
                 <SidebarNavItem
                   href={godPath(GOD_SECTIONS[0]!.slug)}
                   icon={Shield}

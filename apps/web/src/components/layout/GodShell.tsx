@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { useSession } from '@/lib/auth-client';
+import { useInstanceAdmin } from '@/hooks/useInstanceAdmin';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -11,13 +11,6 @@ import SectionPageSkeleton from '@/components/common/skeleton/SectionPageSkeleto
 import UserMenu from '@/components/layout/UserMenu';
 import GodSidebar from '@/components/layout/GodSidebar';
 
-// The shell for god mode: the instance settings sidebar and a slim header, with no
-// project loaded. It is the counterpart of Shell for the project routes, but far
-// smaller — nothing here needs the board, overlays, or project permissions.
-//
-// Access is by the global role: only the instance owner ("god") sees the pages. The
-// API enforces the same on every /god route, so this check is about what to render,
-// not about security.
 export default function GodShell({
   defaultSidebarOpen,
   children,
@@ -26,13 +19,7 @@ export default function GodShell({
   children: ReactNode;
 }) {
   const t = useTranslations('nav');
-  const { data: session, isPending } = useSession();
-  // The session can already be in the store on hydration while the server rendered
-  // without it, so the role is only read after mount.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const isGod = mounted && session?.user.role === 'god';
-  const sessionSettled = mounted && !isPending;
+  const { isAdmin, isPending } = useInstanceAdmin();
 
   return (
     <SidebarProvider defaultOpen={defaultSidebarOpen} className="h-svh overflow-hidden">
@@ -50,13 +37,13 @@ export default function GodShell({
         </header>
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {isGod && children}
-          {!isGod && sessionSettled && (
+          {isAdmin && children}
+          {!isAdmin && !isPending && (
             <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
-              {t('godModeOwnerOnly')}
+              {t('godModeAdminOnly')}
             </div>
           )}
-          {!isGod && !sessionSettled && <SectionPageSkeleton />}
+          {!isAdmin && isPending && <SectionPageSkeleton />}
         </div>
       </SidebarInset>
     </SidebarProvider>

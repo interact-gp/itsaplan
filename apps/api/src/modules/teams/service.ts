@@ -3,6 +3,7 @@ import {
   agentTool,
   aiAgent,
   db,
+  isOrganizationAdmin,
   integrationCredential,
   issue,
   issueActivity,
@@ -185,9 +186,8 @@ export interface TeamLeadRow {
   role: 'owner' | 'manager';
 }
 
-// The caller's teams as DTOs, optionally narrowed to one. Membership is the join,
-// so a team the caller left is not returned at all.
 async function loadTeamRows(userId: string, teamId?: number): Promise<TeamRow[]> {
+  const admin = await isOrganizationAdmin(userId);
   const rows = await db
     .select({
       id: team.id,
@@ -198,12 +198,13 @@ async function loadTeamRows(userId: string, teamId?: number): Promise<TeamRow[]>
       joinedAt: teamMember.createdAt,
       createdAt: team.createdAt,
     })
-    .from(teamMember)
-    .innerJoin(team, eq(team.id, teamMember.teamId))
+    .from(team)
+    .leftJoin(teamMember, and(eq(team.id, teamMember.teamId), eq(teamMember.userId, userId)))
     .where(
-      teamId === undefined
-        ? eq(teamMember.userId, userId)
-        : and(eq(teamMember.userId, userId), eq(team.id, teamId)),
+      and(
+        admin ? undefined : eq(teamMember.userId, userId),
+        teamId === undefined ? undefined : eq(team.id, teamId),
+      ),
     )
     .orderBy(team.id);
   if (rows.length === 0) return [];
@@ -275,15 +276,15 @@ async function loadTeamRows(userId: string, teamId?: number): Promise<TeamRow[]>
   const tools = new Map(toolCounts.map((r) => [r.teamId, r.count]));
 
   return rows.map((row) => {
-    const standing = row.role as TeamStanding;
+    const standing = admin ? 'owner' : (row.role as TeamStanding);
     const projectCount = projects.get(row.id);
     return {
       id: row.id,
       name: row.name,
       mcpEnabled: row.mcpEnabled,
       role: standing,
-      source: row.source as MemberSource,
-      joinedAt: iso(row.joinedAt),
+      source: (row.source ?? 'invite') as MemberSource,
+      joinedAt: iso(row.joinedAt ?? row.createdAt),
       projectCount: (runsTeam(standing) ? projectCount?.count : projectCount?.joined) ?? 0,
       memberCount: members.get(row.id)?.count ?? 0,
       ownerCount: members.get(row.id)?.owners ?? 0,
@@ -297,8 +298,6 @@ async function loadTeamRows(userId: string, teamId?: number): Promise<TeamRow[]>
   });
 }
 
-// The teams the user belongs to. mcpOnly drops the ones with MCP switched off, so an
-// MCP caller only sees the teams it can act in.
 export async function listTeams(
   userId: string,
   opts: { mcpOnly?: boolean } = {},
@@ -489,6 +488,7 @@ export async function listTeamProjects(
   standing: TeamStanding,
   options: { search?: string; limit: number; offset: number },
 ): Promise<TeamProjectPage> {
+  const admin = await isOrganizationAdmin(userId);
   const where = visibleTeamProjects(teamId, userId, standing, options.search);
   const [projects, counted] = await Promise.all([
     db
@@ -553,7 +553,7 @@ export async function listTeamProjects(
       mcpEnabled: p.mcpEnabled,
       memberCount: p.memberCount,
       owners: ownersByProject.get(p.id) ?? [],
-      isMember: p.isMember ?? false,
+      isMember: admin || (p.isMember ?? false),
       createdAt: iso(p.createdAt),
     })),
     total: counted[0]?.count ?? 0,
@@ -763,10 +763,6 @@ async function membershipInTransaction(
   return row ? (row.role as TeamStanding) : null;
 }
 
-// Changes what a member ranks as in the team. An agent's standing comes from its
-// agent settings, and nobody sets their own rank. Only an owner grants the owner rank
-// or changes what another owner holds, which is also what keeps the last owner in
-// place: demoting an owner takes a second one.
 export async function setTeamMemberRole(
   teamId: number,
   actor: { userId: string; role: TeamStanding },
@@ -776,7 +772,9 @@ export async function setTeamMemberRole(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.select({ id: team.id }).from(team).where(eq(team.id, teamId)).for('update');
-    const actorRole = await membershipInTransaction(tx, teamId, actor.userId);
+    const actorRole = (await isOrganizationAdmin(actor.userId))
+      ? 'owner'
+      : await membershipInTransaction(tx, teamId, actor.userId);
     if (!runsTeam(actorRole))
       throw new HttpError(403, 'Only a team owner or manager can change ranks');
     if (userId === actor.userId) throw new HttpError(409, 'You cannot change your own rank');
@@ -787,6 +785,7 @@ export async function setTeamMemberRole(
     if (actorRole !== 'owner' && (role === 'owner' || current === 'owner')) {
       throw new HttpError(403, 'Only a team owner can grant or take the owner rank');
     }
+    if (current === 'owner' && role !== 'owner') await assertAnotherTeamOwner(tx, teamId);
     if (roleId != null) {
       const [custom] = await tx
         .select({ id: teamRole.id })
@@ -883,9 +882,6 @@ async function assertNotProvisioned(
   }
 }
 
-// Removes a member from the team. Nobody removes themselves — that is leaving the
-// team. Removing an owner is possible because the actor is one and stays, so the team
-// never loses its last owner.
 export async function removeTeamMember(
   teamId: number,
   actorId: string,
@@ -893,7 +889,10 @@ export async function removeTeamMember(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.select({ id: team.id }).from(team).where(eq(team.id, teamId)).for('update');
-    if ((await membershipInTransaction(tx, teamId, actorId)) !== 'owner') {
+    if (
+      !(await isOrganizationAdmin(actorId)) &&
+      (await membershipInTransaction(tx, teamId, actorId)) !== 'owner'
+    ) {
       throw new HttpError(403, 'Only a team owner can remove members');
     }
     if (userId === actorId) throw new HttpError(409, 'Leave the team instead of removing yourself');
@@ -901,6 +900,7 @@ export async function removeTeamMember(
     if (!current) throw new HttpError(404, 'Member not found');
     if (current === 'agent')
       throw new HttpError(409, 'An agent is removed with its agent settings');
+    if (current === 'owner') await assertAnotherTeamOwner(tx, teamId);
     await assertNotProvisioned(tx, teamId, userId);
     await assertLeavesNoProjectOwnerless(tx, teamId, userId, 'They');
     await dropTeamMembership(tx, teamId, userId);
@@ -929,4 +929,12 @@ export async function leaveTeam(teamId: number, userId: string): Promise<void> {
     await assertLeavesNoProjectOwnerless(tx, teamId, userId, 'You');
     await dropTeamMembership(tx, teamId, userId);
   });
+}
+
+async function assertAnotherTeamOwner(tx: Transaction, teamId: number): Promise<void> {
+  const [{ count }] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(teamMember)
+    .where(and(eq(teamMember.teamId, teamId), eq(teamMember.role, 'owner')));
+  if (count <= 1) throw new HttpError(409, 'The team must keep at least one owner');
 }

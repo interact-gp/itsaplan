@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import {
   db,
   notification,
@@ -35,16 +36,15 @@ export interface NewNotificationRow {
   actorUserId: string | null;
 }
 
-// Keeps only the ids that are members of the project. Filters out non-members (an
-// agent's bot user is assigned via delegate but is not a member) and users who have
-// lost access.
-async function keepProjectMembers(projectId: number, ids: string[]): Promise<Set<string>> {
+async function keepProjectAccess(projectId: number, ids: string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const rows = await db
     .select({ userId: projectMember.userId })
     .from(projectMember)
     .where(and(eq(projectMember.projectId, projectId), inArray(projectMember.userId, ids)));
-  return new Set(rows.map((r) => r.userId));
+  const allowed = new Set(rows.map((r) => r.userId));
+  for (const id of ids) if (await isOrganizationAdmin(id)) allowed.add(id);
+  return allowed;
 }
 
 async function actorName(id: string | null): Promise<string | null> {
@@ -186,7 +186,7 @@ export async function notifyIssueChange(input: {
   if (input.assignedUserId) {
     await autoWatchIssue(projectId, issueId, [input.assignedUserId]);
     if (input.assignedUserId !== actor) {
-      const members = await keepProjectMembers(projectId, [input.assignedUserId]);
+      const members = await keepProjectAccess(projectId, [input.assignedUserId]);
       if (members.has(input.assignedUserId)) {
         rows.push({
           userId: input.assignedUserId,
@@ -345,7 +345,7 @@ export async function listNotifications(
       payload: issueActivity.payload,
     })
     .from(notification)
-    .innerJoin(
+    .leftJoin(
       projectMember,
       and(eq(projectMember.projectId, notification.projectId), eq(projectMember.userId, userId)),
     )
@@ -353,7 +353,12 @@ export async function listNotifications(
     .innerJoin(project, eq(project.id, notification.projectId))
     .innerJoin(projectColumn, eq(projectColumn.id, issue.columnId))
     .leftJoin(issueActivity, eq(issueActivity.id, notification.sourceActivityId))
-    .where(and(...conds))
+    .where(
+      and(
+        ...conds,
+        (await isOrganizationAdmin(userId)) ? undefined : eq(projectMember.userId, userId),
+      ),
+    )
     .orderBy(desc(notification.createdAt), desc(notification.id))
     .limit(limit + 1);
 
@@ -378,11 +383,16 @@ export async function unreadCount(userId: string, projectId?: number): Promise<n
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(notification)
-    .innerJoin(
+    .leftJoin(
       projectMember,
       and(eq(projectMember.projectId, notification.projectId), eq(projectMember.userId, userId)),
     )
-    .where(and(...conds));
+    .where(
+      and(
+        ...conds,
+        (await isOrganizationAdmin(userId)) ? undefined : eq(projectMember.userId, userId),
+      ),
+    );
   return row?.n ?? 0;
 }
 

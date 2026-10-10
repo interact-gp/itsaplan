@@ -1,6 +1,8 @@
 # Local Keycloak and Shastra V1
 
-Keycloak grants application access through `/access/frnd-prd/member` and organization administration through `/access/frnd-prd/admin`. Organization admins create teams and grant application access to existing, enabled, verified company identities. Team owners grant team administrative ranks. Team owners and managers manage ordinary memberships and projects. Team custom roles can grant `projects.create`; project content still requires a project membership and its permission matrix.
+Keycloak grants application access through `/access/frnd-prd/member` and organization administration through `/access/frnd-prd/admin`. Active human organization admins with fresh synchronized access have full instance, team and project access in the UI, API and MCP, including private project documents and note boards. They can create teams and projects, manage memberships and custom roles, and grant application access to existing, enabled, verified company identities. Global access does not create stored memberships. Removing admin access removes the global override on subsequent authorization checks after synchronization. MCP enablement, project feature settings and data integrity checks remain enforced.
+
+Ordinary members use scoped permissions. Team owners grant team administrative ranks. Team owners and managers manage ordinary memberships and projects. Team custom roles can grant `projects.create`; ordinary members require project membership and its permission matrix to access project content. Agents never inherit organization-admin access.
 
 An authorized user with no assignments has an empty workspace. Managed provisioning creates no personal team. UI and MCP call the same guarded API routes. Managed MCP operations require an explicit team ID and honor team/project MCP switches. Shastra's reviewed V1 registry excludes autonomous agents and integration credential tools.
 

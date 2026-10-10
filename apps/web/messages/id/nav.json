@@ -40,5 +40,6 @@
     "automation": "Otomatisasi"
   },
   "godModeOwnerOnly": "Mode God hanya terbuka untuk pemilik instance.",
-  "project": "Proyek"
+  "project": "Proyek",
+  "godModeAdminOnly": "Instance administration is available to the instance owner and organization administrators."
 }

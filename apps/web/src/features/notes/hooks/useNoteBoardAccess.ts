@@ -1,14 +1,14 @@
 import type { NoteBoard } from '@/lib/api/endpoints/noteBoards';
 import { useSession } from '@/lib/auth-client';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useOrganizationAccessQuery } from '@/services/organization.service';
 
-// What the current user may do with one board. Changing who sees a board is
-// limited to its creator (the API enforces the same rule), so a board with no
-// recorded creator can never be hidden from the project.
 export function useNoteBoardAccess(board: NoteBoard | null | undefined) {
   const { can } = usePermissions();
+  const access = useOrganizationAccessQuery();
   const { data: session } = useSession();
   const canEdit = can('note_boards', 'edit');
   const isCreator = board?.createdByUserId != null && board.createdByUserId === session?.user.id;
-  return { canEdit, canChangeVisibility: canEdit && isCreator };
+  const admin = !access.isError && access.data?.globalAccess === true;
+  return { canEdit, canChangeVisibility: canEdit && (isCreator || admin) };
 }

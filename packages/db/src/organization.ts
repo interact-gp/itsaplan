@@ -12,6 +12,13 @@ export const organizationGroups = {
 };
 
 export async function organizationAccess(userId: string) {
+  const [person] = await db
+    .select({ active: user.active, agentId: aiAgent.id })
+    .from(user)
+    .leftJoin(aiAgent, eq(aiAgent.userId, user.id))
+    .where(eq(user.id, userId));
+  if (!person || person.active === false || person.agentId !== null)
+    return { enabled: false, admin: false };
   const groups = await db
     .select({ name: scimGroup.displayName })
     .from(scimGroupMember)
@@ -40,4 +47,8 @@ export async function hasApplicationAccess(userId: string) {
   if (agent) return agent.active !== false;
 
   return (await organizationAccess(userId)).enabled;
+}
+
+export async function isOrganizationAdmin(userId: string): Promise<boolean> {
+  return managedAccess() && (await organizationAccess(userId)).admin;
 }

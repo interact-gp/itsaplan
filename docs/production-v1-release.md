@@ -81,7 +81,7 @@ port closes. Preserve a copy of the exact tested images for live promotion.
 | Existing entitled user | Fresh IdP login reaches the same account and protected operation; no duplicate or lost ownership | Independent gateway login and same-account consent connect the expected user |
 | New supported onboarding | Closed self-registration denied; supported provisioning creates one subject-linked, least-privilege account | Connect works after provisioning; no inherited unrelated grants |
 | Entitled, unassigned member | Empty workspace, no automatic personal team or project | No usable unassigned resource access; guessed IDs are denied |
-| Organization admins | Five fixture admins can create/manage teams and application access within the documented organization model | Corresponding permitted catalogue and successful protected operation |
+| Organization admins | Fresh active human admins can administer the instance and every team/project, including private project content, without membership; demotion removes global access | Permitted catalogue and protected operations across unjoined teams/projects, private content and post-demotion denial; MCP enablement and feature settings remain enforced |
 | Team owner/manager | Team projects/member management obey rank and last-owner rules | Same permitted actions and denials as UI |
 | Custom roles | Create a team/project role with selected permissions; assign it; permitted action succeeds and forbidden action fails | Catalogue/discovery reflect capabilities; execution enforces target permissions |
 | Project-only assignment | Assigned project usable; sibling projects and broader team administration unavailable | Direct assigned read/write as permitted; sibling, forged scope and admin calls denied |

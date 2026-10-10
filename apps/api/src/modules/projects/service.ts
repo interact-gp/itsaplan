@@ -1,5 +1,6 @@
 import {
   db,
+  isOrganizationAdmin,
   chatAttachment,
   documentAsset,
   initiative,
@@ -35,8 +36,7 @@ import { lockAttachmentStorage } from '#modules/attachments/storage';
 
 // Data access for projects: the top-level container that groups its own columns,
 // issue types, labels, assignees, custom fields, issues, saved views, and
-// actions. Access is by membership (project_member): the creator becomes an
-// "owner" and only members can reach a project's entities.
+// actions. The creator becomes a project owner.
 
 export interface ProjectRow {
   id: number;
@@ -130,17 +130,16 @@ export async function mapProject(row: ProjectWithTeam): Promise<ProjectRow> {
   };
 }
 
-// Only the projects the user is a member of, ordered by key. Each carries the
-// caller's role in that project (owner | member). When mcpOnly is set, projects out
-// of their team's MCP reach are excluded, so an MCP caller only sees projects it can
-// work with.
 export async function listProjects(
   userId: string,
   opts: { mcpOnly?: boolean; withPermissions?: boolean } = {},
 ): Promise<ProjectListItem[]> {
-  const where = opts.mcpOnly
-    ? and(eq(projectMember.userId, userId), eq(project.mcpEnabled, true), eq(team.mcpEnabled, true))
-    : eq(projectMember.userId, userId);
+  const admin = await isOrganizationAdmin(userId);
+  const membership = admin ? undefined : eq(projectMember.userId, userId);
+  const where = and(
+    membership,
+    opts.mcpOnly ? and(eq(project.mcpEnabled, true), eq(team.mcpEnabled, true)) : undefined,
+  );
   const rows = await db
     .select({
       ...projectWithTeam,
@@ -149,13 +148,16 @@ export async function listProjects(
     })
     .from(project)
     .innerJoin(team, eq(team.id, project.teamId))
-    .innerJoin(projectMember, eq(projectMember.projectId, project.id))
+    .leftJoin(
+      projectMember,
+      and(eq(projectMember.projectId, project.id), eq(projectMember.userId, userId)),
+    )
     .leftJoin(teamRole, eq(teamRole.id, projectMember.roleId))
     .where(where)
     .orderBy(project.key);
   return Promise.all(
     rows.map(async ({ memberRole, rolePermissions, ...row }) => {
-      const role = memberRole === 'owner' ? 'owner' : 'member';
+      const role = admin || memberRole === 'owner' ? 'owner' : 'member';
       const item: ProjectListItem = { ...(await mapProject(row)), role };
       if (opts.withPermissions) {
         item.permissions =

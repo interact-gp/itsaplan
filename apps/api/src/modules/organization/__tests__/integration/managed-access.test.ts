@@ -82,6 +82,7 @@ describe('managed organization access', () => {
 
   it('provisions an unassigned identity without creating a personal team', async () => {
     const { adminApi } = await actors();
+    const teamsBefore = (await adminApi.teams.get()).data;
     const person = await createScimUser({
       email: 'new@frnd.app',
       name: 'New Member',
@@ -91,7 +92,7 @@ describe('managed organization access', () => {
     expect(await db.select().from(teamMember).where(eq(teamMember.userId, person.id))).toHaveLength(
       0,
     );
-    expect((await adminApi.teams.get()).data).toEqual([]);
+    expect((await adminApi.teams.get()).data).toEqual(teamsBefore);
   });
 
   it('restricts team creation to organization admins and delegates projects through a team role', async () => {
@@ -140,6 +141,246 @@ describe('managed organization access', () => {
     expect((await memberApi.projects({ projectKey: 'MINE' }).get()).status).toBe(200);
   });
 
+  it('grants fresh organization admins full access without memberships and revokes existing credentials', async () => {
+    const { admin, member, adminApi, memberApi } = await actors();
+    const teamId = (await adminApi.teams.post({ name: 'Independent team' })).data!.id;
+    const project = (
+      await adminApi.teams({ teamId }).projects.post({ key: 'GLOBAL', name: 'Global access' })
+    ).data!;
+    await adminApi.teams({ teamId }).members.post({ email: member.email, role: 'owner' });
+    await adminApi
+      .projects({ projectKey: project.key })
+      .members.post({ userId: member.userId, role: 'owner' });
+    expect(
+      (
+        await adminApi
+          .projects({ projectKey: project.key })
+          .members({ userId: admin.userId })
+          .delete()
+      ).status,
+    ).toBe(204);
+    expect((await adminApi.teams({ teamId }).leave.post()).status).toBe(204);
+    const key = await keyFor(admin.userId);
+    await memberApi
+      .projects({ projectKey: project.key })
+      .settings.patch({ features: { documents: true, notes: true } });
+    const document = (
+      await memberApi
+        .projects({ projectKey: project.key })
+        .documents.post({ title: 'Private project document', isPrivate: true })
+    ).data!;
+    const board = (
+      await memberApi
+        .projects({ projectKey: project.key })
+        ['note-boards'].post({ name: 'Private project board', visibility: 'private' })
+    ).data!;
+    expect(
+      (await adminApi.projects({ projectKey: project.key }).documents.get({ query: {} })).data,
+    ).toContainEqual(expect.objectContaining({ id: document.id }));
+    expect(
+      (
+        await adminApi
+          .projects({ projectKey: project.key })
+          .documents({ documentId: document.id })
+          .patch({ version: document.version, title: 'Admin edited private document' })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await adminApi.projects({ projectKey: project.key })['note-boards'].get({ query: {} })).data,
+    ).toContainEqual(expect.objectContaining({ id: board.id }));
+    expect(
+      (
+        await adminApi
+          .projects({ projectKey: project.key })
+          ['note-boards']({ boardId: board.id })
+          .patch({ name: 'Admin edited private board', visibility: 'restricted', memberIds: [] })
+      ).status,
+    ).toBe(200);
+    const columnId = (await memberApi.projects({ projectKey: project.key }).get()).data!.columns[0]!
+      .id;
+    const watchedIssue = (
+      await memberApi
+        .projects({ projectKey: project.key })
+        .issues.post({ title: 'Admin watching', columnId })
+    ).data!;
+    expect((await adminApi.issues({ issueId: watchedIssue.id }).watch.post()).status).toBe(200);
+    expect(
+      (await adminApi.issues({ issueId: watchedIssue.id }).get()).data?.watchers,
+    ).toContainEqual(expect.objectContaining({ userId: admin.userId }));
+    await memberApi
+      .issues({ issueId: watchedIssue.id })
+      .comments.post({ body: 'Update for the admin watcher' });
+    expect(
+      (await adminApi.notifications.get({ query: { types: 'commented' } })).data?.items,
+    ).toContainEqual(expect.objectContaining({ issueId: watchedIssue.id }));
+    expect((await adminApi.teams.get()).data).toContainEqual(
+      expect.objectContaining({ id: teamId, role: 'owner' }),
+    );
+    expect((await adminApi.projects.get()).data).toContainEqual(
+      expect.objectContaining({ id: project.id, role: 'owner' }),
+    );
+    expect((await adminApi.teams({ teamId }).get()).data?.permissions.projects.create).toBe(true);
+    expect((await adminApi.projects({ projectKey: project.key }).get()).data?.viewer).toMatchObject(
+      { role: 'owner', teamRole: 'owner' },
+    );
+    expect((await adminApi.god['auth-settings'].get()).status).toBe(200);
+    expect((await memberApi.god['auth-settings'].get()).status).toBe(403);
+    expect((await adminApi.teams({ teamId }).patch({ name: 'Renamed globally' })).status).toBe(200);
+    expect(
+      (await adminApi.projects({ projectKey: project.key }).patch({ name: 'Renamed project' }))
+        .status,
+    ).toBe(200);
+    const colleague = await createScimUser({
+      email: 'colleague@frnd.app',
+      name: 'Colleague',
+      active: true,
+      externalId: 'colleague-subject',
+    });
+    await grant(colleague.id, 'member');
+    await grant(member.userId, 'admin');
+    const neverJoined = (await memberApi.teams.post({ name: 'Never joined by admin' })).data!.id;
+    await db.delete(scimGroupMember).where(eq(scimGroupMember.userId, member.userId));
+    await grant(member.userId, 'member');
+    expect(
+      (
+        await adminApi
+          .teams({ teamId: neverJoined })
+          .members.post({ email: colleague.email, role: 'owner' })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await adminApi.teams({ teamId }).members.post({ email: colleague.email, role: 'member' }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await adminApi.teams({ teamId }).members({ userId: colleague.id }).patch({ role: 'owner' }))
+        .status,
+    ).toBe(204);
+    expect(
+      (await adminApi.teams({ teamId }).members({ userId: colleague.id }).patch({ role: 'member' }))
+        .status,
+    ).toBe(204);
+    expect(
+      (await adminApi.teams({ teamId }).members({ userId: colleague.id }).delete()).status,
+    ).toBe(204);
+    expect(
+      (
+        await adminApi
+          .teams({ teamId })
+          .roles.post({ name: 'Global role', permissions: { projects: { create: true } } })
+      ).status,
+    ).toBe(201);
+    expect(
+      (await adminApi.teams({ teamId }).projects.post({ key: 'GLOBAL2', name: 'Second' })).status,
+    ).toBe(201);
+    expect(
+      (
+        await adminApi
+          .teams({ teamId })
+          .members({ userId: member.userId })
+          .patch({ role: 'member' })
+      ).status,
+    ).toBe(409);
+    expect(
+      (await adminApi.teams({ teamId }).members({ userId: member.userId }).delete()).status,
+    ).toBe(409);
+    expect(await listed(key)).toContain('create_team_project');
+    const call = await rpc(key, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectKey: project.key },
+    });
+    const text = await call.text();
+    expect(JSON.parse(text.slice(text.indexOf('data: ') + 6)).result.structuredContent.status).toBe(
+      200,
+    );
+    await adminApi.teams({ teamId }).mcp.patch({ enabled: false });
+    const disabled = await rpc(key, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectKey: project.key },
+    });
+    const disabledText = await disabled.text();
+    expect(JSON.parse(disabledText.slice(disabledText.indexOf('data: ') + 6)).result.isError).toBe(
+      true,
+    );
+    await adminApi.teams({ teamId }).mcp.patch({ enabled: true });
+    await db.delete(scimGroupMember).where(eq(scimGroupMember.userId, admin.userId));
+    await grant(admin.userId, 'member');
+    expect((await adminApi.teams({ teamId }).get()).status).toBe(404);
+    expect((await adminApi.projects({ projectKey: project.key }).get()).status).toBe(403);
+    expect((await adminApi.god['auth-settings'].get()).status).toBe(403);
+    expect((await apiKeyApi(key).projects({ projectKey: project.key }).get()).status).toBe(403);
+    expect(
+      (await memberApi.issues({ issueId: watchedIssue.id }).get()).data?.watchers,
+    ).not.toContainEqual(expect.objectContaining({ userId: admin.userId }));
+    expect(
+      (await adminApi.notifications.get({ query: { types: 'commented' } })).data?.items,
+    ).toEqual([]);
+    expect(await listed(key)).not.toContain('create_team_project');
+    expect(await listed(key)).not.toContain('create_team');
+    const revoked = await rpc(key, 'tools/call', {
+      name: 'get_project',
+      arguments: { projectKey: project.key },
+    });
+    const revokedText = await revoked.text();
+    expect(JSON.parse(revokedText.slice(revokedText.indexOf('data: ') + 6)).result.isError).toBe(
+      true,
+    );
+    await grant(admin.userId, 'admin');
+    await db.update(user).set({ active: false }).where(eq(user.id, admin.userId));
+    expect(await organizationAccess(admin.userId)).toEqual({ enabled: false, admin: false });
+    expect((await apiKeyApi(key).projects({ projectKey: project.key }).get()).status).toBe(401);
+    await db.update(user).set({ active: true }).where(eq(user.id, admin.userId));
+    await setSetting('organization.lastSync', Date.now() - 120_001);
+    expect((await adminApi.projects({ projectKey: project.key }).get()).status).toBe(403);
+  });
+
+  it('assigns an owner when an administrator makes orphaned project content private', async () => {
+    const { admin, member, adminApi, memberApi } = await actors();
+    const teamId = (await adminApi.teams.post({ name: 'Content team' })).data!.id;
+    const project = (
+      await adminApi.teams({ teamId }).projects.post({ key: 'ORPHAN', name: 'Content recovery' })
+    ).data!;
+    await adminApi.teams({ teamId }).members.post({ email: member.email, role: 'member' });
+    await adminApi
+      .projects({ projectKey: project.key })
+      .members.post({ userId: member.userId, role: 'member' });
+    await adminApi
+      .projects({ projectKey: project.key })
+      .settings.patch({ features: { documents: true, notes: true } });
+    const document = (
+      await memberApi
+        .projects({ projectKey: project.key })
+        .documents.post({ title: 'Preserved document' })
+    ).data!;
+    const board = (
+      await memberApi
+        .projects({ projectKey: project.key })
+        ['note-boards'].post({ name: 'Preserved board', visibility: 'public' })
+    ).data!;
+    expect((await adminApi.god.users({ userId: member.userId }).delete({ query: {} })).status).toBe(
+      204,
+    );
+    const orphanedDocument = (
+      await adminApi
+        .projects({ projectKey: project.key })
+        .documents({ documentId: document.id })
+        .get()
+    ).data!;
+    expect(orphanedDocument.ownerUserId).toBeNull();
+    const privateDocument = await adminApi
+      .projects({ projectKey: project.key })
+      .documents({ documentId: document.id })
+      .access.post({ version: orphanedDocument.version, isPrivate: true });
+    expect(privateDocument.status).toBe(200);
+    expect(privateDocument.data).toMatchObject({ isPrivate: true, ownerUserId: admin.userId });
+    const privateBoard = await adminApi
+      .projects({ projectKey: project.key })
+      ['note-boards']({ boardId: board.id })
+      .patch({ visibility: 'private' });
+    expect(privateBoard.status).toBe(200);
+    expect(privateBoard.data).toMatchObject({ visibility: 'private', ownerUserId: admin.userId });
+  });
+
   it('allows registered agents within their scope without granting human or administrator access', async () => {
     const { adminApi, member, memberApi } = await actors();
     const teamId = (await adminApi.teams.post({ name: 'Agent team' })).data!.id;
@@ -155,6 +396,7 @@ describe('managed organization access', () => {
     });
     expect(created.status).toBe(201);
     const { agent, apiKey } = created.data!;
+    await grant(agent.userId, 'admin');
     const asAgent = apiKeyApi(apiKey!);
     expect((await asAgent.projects({ projectKey: 'BOT' }).get()).status).toBe(200);
     expect((await asAgent['agent-runs'].claim.post()).status).toBe(200);

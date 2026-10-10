@@ -1,5 +1,6 @@
 import {
   db,
+  isOrganizationAdmin,
   project,
   projectMember,
   teamMember,
@@ -112,12 +113,11 @@ export function toMemberContext(role: MemberRole, rolePermissions: unknown): Mem
   };
 }
 
-// The current user's role and resolved permission matrix in a project, or null
-// when they are not a member. This is the single lookup behind assertPermission.
 export async function getMemberContext(
   projectId: number,
   userId: string,
 ): Promise<MemberContext | null> {
+  if (await isOrganizationAdmin(userId)) return toMemberContext('owner', null);
   const rows = await db
     .select({
       role: projectMember.role,
@@ -130,8 +130,8 @@ export async function getMemberContext(
   return r ? toMemberContext(r.role as MemberRole, r.permissions) : null;
 }
 
-// Project memberships contribute team resource permissions; project creation requires a team role.
 export async function getTeamPermissions(teamId: number, userId: string): Promise<Permissions> {
+  if (await isOrganizationAdmin(userId)) return fullPermissions();
   const [teamGrant] = await db
     .select({ permissions: teamRole.permissions })
     .from(teamMember)

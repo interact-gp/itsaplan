@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { db, managedAccess, organizationAccess, user } from '@repo/db';
+import { isOrganizationAdmin, db, managedAccess, organizationAccess, user } from '@repo/db';
 import { eq } from 'drizzle-orm';
 import { authContext } from '#shared/auth-context';
 import { guards } from '#shared/guards';
@@ -15,6 +15,7 @@ export const organizationRoutes = new Elysia({ name: 'organization' })
     '/organization/access',
     async ({ user }) => ({
       managed: managedAccess(),
+      globalAccess: await isOrganizationAdmin(user!.id),
       ...(managedAccess() && user!.role !== 'god'
         ? await organizationAccess(user!.id)
         : { enabled: true, admin: true }),

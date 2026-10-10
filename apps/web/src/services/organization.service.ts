@@ -1,12 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSession } from '@/lib/auth-client';
 import {
   getOrganizationAccess,
   listOrganizationUsers,
   setOrganizationAccess,
 } from '@/lib/api/endpoints/organization';
 
-export const useOrganizationAccessQuery = () =>
-  useQuery({ queryKey: ['organization-access'], queryFn: getOrganizationAccess });
+export function useOrganizationAccessQuery() {
+  const { data: session } = useSession();
+  return useQuery({
+    queryKey: ['organization-access', session?.user.id],
+    queryFn: getOrganizationAccess,
+    enabled: Boolean(session?.user.id),
+  });
+}
 
 export const useOrganizationUsersQuery = (enabled: boolean) =>
   useQuery({ queryKey: ['organization-users'], queryFn: listOrganizationUsers, enabled });

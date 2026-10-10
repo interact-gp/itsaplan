@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import { Elysia } from 'elysia';
 import { requireUser } from '#shared/access';
 import { authContext } from '#shared/auth-context';
@@ -47,7 +48,11 @@ export const userPreferenceRoutes = new Elysia({
       }
       // Only a project the user belongs to can be remembered, so the stored id can
       // never point at one they cannot open.
-      if (body.lastProjectId != null && !(await getMembership(body.lastProjectId, current.id))) {
+      if (
+        body.lastProjectId != null &&
+        !(await isOrganizationAdmin(current.id)) &&
+        !(await getMembership(body.lastProjectId, current.id))
+      ) {
         throw new HttpError(403, 'You do not have access to this project');
       }
       return updatePreferences(

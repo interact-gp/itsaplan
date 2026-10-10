@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import { Elysia, t } from 'elysia';
 import { mcpTool } from '#mcp/generate';
 import { noContent } from '#shared/http';
@@ -162,7 +163,10 @@ export const projectRoutes = new Elysia({ name: 'projects', detail: { tags: ['Pr
         assignees,
         customFields,
         issueTemplates,
-        viewer: { role: viewer.role, teamRole },
+        viewer: {
+          role: viewer.role,
+          teamRole: (await isOrganizationAdmin(userId)) ? 'owner' : teamRole,
+        },
         permissions: viewer.permissions,
       };
     },

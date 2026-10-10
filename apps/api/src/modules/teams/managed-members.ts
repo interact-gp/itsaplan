@@ -1,5 +1,13 @@
 import { and, eq } from 'drizzle-orm';
-import { db, organizationAccess, team, teamMember, teamRole, user } from '@repo/db';
+import {
+  isOrganizationAdmin,
+  db,
+  organizationAccess,
+  team,
+  teamMember,
+  teamRole,
+  user,
+} from '@repo/db';
 import { HttpError } from '#shared/lib';
 import { assertTeamSeatFree } from './service';
 
@@ -14,7 +22,7 @@ export async function addManagedTeamMember(
       .select({ role: teamMember.role })
       .from(teamMember)
       .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, actorId)));
-    const actorRole = actor?.role;
+    const actorRole = (await isOrganizationAdmin(actorId)) ? 'owner' : actor?.role;
     if (actorRole !== 'owner' && actorRole !== 'manager')
       throw new HttpError(403, 'Only a team owner or manager can add members');
     if (input.role !== 'member' && actorRole !== 'owner')
