@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "nodemailer": "^9.1.1"
+    "nodemailer": "^10.1.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
