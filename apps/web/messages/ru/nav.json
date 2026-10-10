@@ -40,5 +40,6 @@
     "automation": "Автоматизация"
   },
   "godModeOwnerOnly": "Режим администратора доступен только владельцу инстанса.",
-  "project": "Проект"
+  "project": "Проект",
+  "godModeAdminOnly": "Instance administration is available to the instance owner and organization administrators."
 }

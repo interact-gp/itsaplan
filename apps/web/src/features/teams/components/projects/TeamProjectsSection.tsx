@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { projectPath } from '@/utils/paths';
-import { useTeam, useTeamProjectsQuery } from '@/services/teams.service';
+import { useTeam, useTeamQuery, useTeamProjectsQuery } from '@/services/teams.service';
 import SectionPageView from '@/components/common/page/SectionPageView';
 import ListSkeleton from '@/components/common/skeleton/ListSkeleton';
 import ListPager from '@/components/common/ListPager';
@@ -23,13 +23,15 @@ export default function TeamProjectsSection({ teamId }: { teamId: number }) {
   const t = useTranslations('teams');
   const router = useRouter();
   const team = useTeam(teamId);
+  const { data: detail } = useTeamQuery(teamId);
   const paging = usePaging();
   const { search, setSearch, term } = useSearchTerm();
   const { data } = useTeamProjectsQuery(teamId, { search: term, ...paging.params });
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  const canCreate = team != null && team.role !== 'member';
+  const canCreate =
+    team != null && (team.role !== 'member' || detail?.permissions.projects?.create === true);
   const projects = data?.items ?? [];
   const total = data?.total ?? 0;
   const selected = projects.find((project) => project.id === selectedId) ?? null;

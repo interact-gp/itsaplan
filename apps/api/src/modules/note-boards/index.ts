@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import { Elysia, t } from 'elysia';
 import { noContent } from '#shared/http';
 import { guards } from '#shared/guards';
@@ -26,10 +27,9 @@ import {
   type NoteBoardRow,
 } from './service';
 
-// A public board is open to any member; a private one to its owner and the members
-// granted access. Anything else is a 404 so a private board's existence does not
-// leak.
-function assertBoardVisible(board: NoteBoardRow, userId: string): void {
+// Hide private board existence from callers without access.
+async function assertBoardVisible(board: NoteBoardRow, userId: string): Promise<void> {
+  if (await isOrganizationAdmin(userId)) return;
   if (
     board.ownerUserId !== null &&
     board.ownerUserId !== userId &&
@@ -47,7 +47,7 @@ async function loadAccessibleBoard(
 ): Promise<NoteBoardRow> {
   const board = await getNoteBoard(boardId);
   if (!board || board.projectId !== projectId) throw new HttpError(404, 'Board not found');
-  assertBoardVisible(board, userId);
+  await assertBoardVisible(board, userId);
   return board;
 }
 
@@ -169,19 +169,20 @@ export const noteBoardRoutes = new Elysia({
       if (body.canvas !== undefined) patch.canvas = body.canvas;
 
       if (body.visibility !== undefined || body.memberIds !== undefined) {
-        if (current.createdByUserId !== userId) {
+        if (current.createdByUserId !== userId && !(await isOrganizationAdmin(userId))) {
           throw new HttpError(403, 'Only the board creator can change who sees the board');
         }
         const visibility = body.visibility ?? current.visibility;
         if (body.memberIds !== undefined && visibility !== 'restricted') {
           throw new HttpError(400, 'Members can only be granted access to a restricted board');
         }
-        patch.ownerUserId = visibility === 'public' ? null : userId;
+        const ownerUserId = current.ownerUserId ?? current.createdByUserId ?? userId;
+        patch.ownerUserId = visibility === 'public' ? null : ownerUserId;
         if (visibility !== 'restricted') {
           // A public or private board grants no one: whoever was listed loses access.
           patch.memberIds = [];
         } else if (body.memberIds !== undefined) {
-          patch.memberIds = await grantedMembers(project.id, userId, body.memberIds);
+          patch.memberIds = await grantedMembers(project.id, ownerUserId, body.memberIds);
         }
       }
 
@@ -212,8 +213,11 @@ export const noteBoardRoutes = new Elysia({
       if (!board || board.projectId !== project.id) throw new HttpError(404, 'Board not found');
       // A project owner deletes any board, a private one included: the board of a
       // member who left the project would otherwise stay for good.
-      if ((await getMembership(project.id, userId)) !== 'owner') {
-        assertBoardVisible(board, userId);
+      if (
+        !(await isOrganizationAdmin(userId)) &&
+        (await getMembership(project.id, userId)) !== 'owner'
+      ) {
+        await assertBoardVisible(board, userId);
         // A private or restricted board belongs to the member who made it, and
         // being granted a view of one does not carry deleting it. A public board
         // stays open to every member the role matrix allows.

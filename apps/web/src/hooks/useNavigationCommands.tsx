@@ -12,7 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useSession } from '@/lib/auth-client';
+import { useInstanceAdmin } from '@/hooks/useInstanceAdmin';
 import {
   aiAgentsPath,
   aiTeamPath,
@@ -55,9 +55,8 @@ export function useNavigationCommands(projectKey: string | null): CommandSection
   const router = useRouter();
   const { can } = usePermissions();
   const features = useProjectFeatures();
-  const { data: session } = useSession();
+  const { isAdmin } = useInstanceAdmin();
   const { groups } = useSettingsNavGroups(projectKey);
-  const isGod = session?.user.role === 'god';
 
   const items: Command[] = [];
 
@@ -142,9 +141,7 @@ export function useNavigationCommands(projectKey: string | null): CommandSection
     add(`nav.account.${s.slug}`, accountLabel(s.slug), <s.icon />, accountPath(s.slug), 'account');
   }
 
-  // Instance administration, owner account only. The API enforces the same, so
-  // hiding it here is about noise, not access.
-  if (isGod) {
+  if (isAdmin) {
     for (const s of GOD_SECTIONS) {
       add(
         `nav.god.${s.slug}`,

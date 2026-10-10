@@ -78,6 +78,7 @@ export const teamMember = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     role: text('role').notNull().default('member'),
+    roleId: integer('role_id').references((): AnyPgColumn => teamRole.id, { onDelete: 'set null' }),
     // How this membership came about, read the same way as project_member.source:
     // 'scim' is a row the SCIM group reconciliation created and therefore owns, so
     // deprovisioning removes it again; everything else is 'invite' and a sync never

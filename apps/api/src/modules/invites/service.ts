@@ -1,4 +1,14 @@
-import { db, teamInvite, teamMember, projectMember, teamRole, team, project, user } from '@repo/db';
+import {
+  isOrganizationAdmin,
+  db,
+  teamInvite,
+  teamMember,
+  projectMember,
+  teamRole,
+  team,
+  project,
+  user,
+} from '@repo/db';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { HttpError, iso, pgErrorCode } from '#shared/lib';
 import { getMembership, type MemberRole } from '#modules/members/service';
@@ -199,6 +209,7 @@ export async function mayGrantInviteRanks(
   const grantsProjectOwner = invite.projectRole === 'owner';
   if (!grantsTeamRank && !grantsProjectOwner) return true;
   if (!senderId) return false;
+  if (await isOrganizationAdmin(senderId)) return true;
 
   const standing = await getTeamMembership(invite.teamId, senderId);
   if (grantsTeamRank && standing !== 'owner') return false;

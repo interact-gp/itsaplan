@@ -40,5 +40,6 @@
     "automation": "Automatización"
   },
   "godModeOwnerOnly": "El modo dios está abierto solo al propietario de la instancia.",
-  "project": "Proyecto"
+  "project": "Proyecto",
+  "godModeAdminOnly": "Instance administration is available to the instance owner and organization administrators."
 }

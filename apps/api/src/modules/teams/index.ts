@@ -8,6 +8,7 @@ import { paginate } from '#shared/pagination';
 import { errors } from '#shared/responses';
 import { isMcpRequest } from '#shared/mcp-request';
 import { mcpTool } from '#mcp/generate';
+import { addManagedTeamMember } from './managed-members';
 import {
   ProjectResponse,
   copyProjectBody,
@@ -96,6 +97,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
       response: { 200: TeamDetailResponse, ...errors(401, 404) },
       detail: {
         summary: 'Get a team',
+        ...mcpTool('get_team'),
         description:
           'A team, with how many projects, members, roles and integration credentials it ' +
           'holds, and what you may do with them. Its members and its projects are listed ' +
@@ -121,6 +123,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
       response: { 200: TeamMemberPageResponse, ...errors(401, 404) },
       detail: {
         summary: 'List team members',
+        ...mcpTool('list_team_members'),
         description:
           'One page of the members of a team you belong to, by name. `search` matches the ' +
           'name, the address or the handle, and `kind` narrows the list to the people or to ' +
@@ -145,6 +148,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
       response: { 200: TeamProjectPageResponse, ...errors(401, 404) },
       detail: {
         summary: 'List team projects',
+        ...mcpTool('list_team_projects'),
         description:
           'One page of the projects a team owns, by key. `search` matches the key or the ' +
           'name. An owner or a manager sees them all; anyone else only the ones they belong to.',
@@ -225,8 +229,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
 
   // The team's MCP settings: whether it is reachable at all, and which of its projects
   // that reach covers. Written by an owner or a manager, who run the team; the current
-  // state is read off the team list and its projects, which both carry it. Not an MCP
-  // tool: it governs MCP access, so an agent must not change it.
+  // state is read off the team list and its projects, which both carry it.
   .patch('/teams/:teamId/mcp', ({ body, membership }) => setTeamMcp(membership.teamId, body), {
     teamManager: true,
     params: teamParams,
@@ -234,12 +237,33 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
     response: { 200: TeamMcpResponse, ...errors(400, 401, 403, 404) },
     detail: {
       summary: "Update a team's MCP settings",
+      ...mcpTool('update_team_mcp'),
       description:
         'Switch MCP on or off for the team, and set which of its projects the reach covers. ' +
         'Each field is optional; a project of another team is ignored.',
     },
   })
 
+  .post(
+    '/teams/:teamId/members',
+    ({ membership, body }) => addManagedTeamMember(membership.teamId, membership.userId, body),
+    {
+      teamManager: true,
+      params: teamParams,
+      body: t.Object({
+        email: t.String({ format: 'email' }),
+        role: t.UnionEnum(['owner', 'manager', 'member']),
+        roleId: t.Optional(t.Nullable(t.Number())),
+      }),
+      response: { 200: t.Object({ userId: t.String() }), ...errors(400, 401, 403, 404, 409) },
+      detail: {
+        summary: 'Add a team member',
+        description:
+          'Add a person with application access to the team, optionally assigning a custom member role. Only a team owner can grant an owner or manager rank.',
+        ...mcpTool('add_team_member', { destructiveHint: true }),
+      },
+    },
+  )
   .post(
     '/teams',
     async ({ body, user, set }) => {
@@ -250,10 +274,12 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
     },
     {
       body: createTeamBody,
-      response: { 201: TeamResponse, ...errors(400, 401) },
+      organizationAdmin: true,
+      response: { 201: TeamResponse, ...errors(400, 401, 403) },
       detail: {
         summary: 'Create a team',
         description: 'Create a team and become its owner.',
+        ...mcpTool('create_team'),
       },
     },
   )
@@ -284,7 +310,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
       return createProject(body, membership.userId, membership.teamId);
     },
     {
-      teamManager: true,
+      teamPermission: ['projects', 'create'],
       params: teamParams,
       body: createProjectBody,
       response: { 201: ProjectResponse, ...errors(400, 401, 403, 404, 409) },
@@ -293,6 +319,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
         description:
           'Create a project the team owns and become its owner. Takes the same body as ' +
           'create_project, which creates in the team you own.',
+        ...mcpTool('create_team_project'),
       },
     },
   )
@@ -365,7 +392,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
   .patch(
     '/teams/:teamId/members/:userId',
     async ({ body, membership, params }) => {
-      await setTeamMemberRole(membership.teamId, membership, params.userId, body.role);
+      await setTeamMemberRole(membership.teamId, membership, params.userId, body.role, body.roleId);
       return noContent();
     },
     {
@@ -375,6 +402,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
       response: { 204: t.Void(), ...errors(401, 403, 404, 409) },
       detail: {
         summary: "Update a member's rank in the team",
+        ...mcpTool('set_team_member_role', { destructiveHint: true }),
         description:
           'Set what a member ranks as in the team. Only an owner grants the owner rank or ' +
           'changes what another owner holds.',
@@ -395,6 +423,7 @@ export const teamRoutes = new Elysia({ name: 'teams', detail: { tags: ['Teams'] 
       response: { 204: t.Void(), ...errors(401, 403, 404, 409) },
       detail: {
         summary: 'Remove a member from the team',
+        ...mcpTool('remove_team_member', { destructiveHint: true }),
         description:
           'Remove a member from the team and from every project the team owns. The issues ' +
           'they were assigned to and the work they logged stay as they are. A membership a ' +

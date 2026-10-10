@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { useOrganizationAccessQuery } from '@/services/organization.service';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { teamPath } from '@/utils/paths';
@@ -18,6 +19,7 @@ export default function ManageTeamsLayout({ children }: { children: ReactNode })
   const router = useRouter();
   const params = useParams<{ teamId?: string }>();
   const [creating, setCreating] = useState(false);
+  const access = useOrganizationAccessQuery();
 
   const activeId = params.teamId ? Number(params.teamId) : null;
 
@@ -29,7 +31,8 @@ export default function ManageTeamsLayout({ children }: { children: ReactNode })
           teams={data ?? []}
           isPending={isPending}
           activeId={activeId}
-          onCreate={() => setCreating(true)}
+          onCreate={access.data?.admin ? () => setCreating(true) : undefined}
+          canManageAccess={Boolean(access.data?.managed && access.data.admin)}
         />
       }
     >

@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import { db, noteBoard, noteBoardMember } from '@repo/db';
 import { and, desc, eq, exists, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { iso } from '#shared/lib';
@@ -60,9 +61,6 @@ async function memberIdsOf(boardId: number): Promise<string[]> {
   return rows.map((r) => r.userId);
 }
 
-// The boards a user may see in a project, paged for the switcher: every public
-// board, the user's own boards, and the private boards they were granted access
-// to, optionally filtered by a name substring, most-recently-updated first.
 export async function listNoteBoards(
   projectId: number,
   userId: string,
@@ -70,18 +68,20 @@ export async function listNoteBoards(
 ): Promise<NoteBoardSummary[]> {
   const visible = and(
     eq(noteBoard.projectId, projectId),
-    or(
-      isNull(noteBoard.ownerUserId),
-      eq(noteBoard.ownerUserId, userId),
-      exists(
-        db
-          .select({ one: sql`1` })
-          .from(noteBoardMember)
-          .where(
-            and(eq(noteBoardMember.boardId, noteBoard.id), eq(noteBoardMember.userId, userId)),
+    (await isOrganizationAdmin(userId))
+      ? undefined
+      : or(
+          isNull(noteBoard.ownerUserId),
+          eq(noteBoard.ownerUserId, userId),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(noteBoardMember)
+              .where(
+                and(eq(noteBoardMember.boardId, noteBoard.id), eq(noteBoardMember.userId, userId)),
+              ),
           ),
-      ),
-    ),
+        ),
   );
   const where = opts.q ? and(visible, ilike(noteBoard.name, `%${opts.q}%`)) : visible;
   const rows = await db

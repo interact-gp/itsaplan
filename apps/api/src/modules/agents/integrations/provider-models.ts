@@ -63,6 +63,7 @@ async function getRegistry(): Promise<Map<string, ProviderModel[]>> {
 // Models known for a provider key, sorted by id. Empty when the provider is not in the
 // registry or the registry could not be loaded.
 export async function listModelsForProvider(provider: string): Promise<ProviderModel[]> {
+  if (process.env.MODEL_CATALOG_ENABLED !== '1') return [];
   try {
     const registry = await getRegistry();
     return registry.get(provider) ?? [];

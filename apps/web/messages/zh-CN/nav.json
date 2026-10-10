@@ -40,5 +40,6 @@
     "automation": "自动化"
   },
   "godModeOwnerOnly": "管理模式仅对实例管理员开放。",
-  "project": "项目"
+  "project": "项目",
+  "godModeAdminOnly": "Instance administration is available to the instance owner and organization administrators."
 }

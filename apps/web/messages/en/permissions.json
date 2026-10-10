@@ -2,6 +2,7 @@
   "none": "No permissions granted",
   "grantedCount": "{count, plural, one {# permission} other {# permissions}} granted",
   "resources": {
+    "projects": "Projects in this team",
     "work_items": "Work items",
     "initiatives": "Initiatives",
     "cycles": "Cycles",

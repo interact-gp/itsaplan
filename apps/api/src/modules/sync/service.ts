@@ -1,4 +1,4 @@
-import { db, projectMember, teamRole, revision } from '@repo/db';
+import { isOrganizationAdmin, db, projectMember, teamRole, revision } from '@repo/db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { toMemberContext, type MemberRole } from '#modules/members/service';
 import { hasPermission, type PermissionResource } from '#shared/permissions';
@@ -37,15 +37,12 @@ export interface ScopeRead {
   resource: PermissionResource | null;
 }
 
-// The markers a client is watching, in one query. The join against the membership
-// is the access check: a scope of a project the user is not a member of returns no
-// row and reads as unchanged. The role decides the rest — a scope whose resource
-// the member may not read is dropped the same way, so it also reads as unchanged.
 export async function readRevs(
   wanted: ScopeRead[],
   userId: string,
 ): Promise<Record<string, string>> {
   if (wanted.length === 0) return {};
+  const admin = await isOrganizationAdmin(userId);
   const rows = await db
     .select({
       scope: revision.scope,
@@ -54,7 +51,10 @@ export async function readRevs(
       permissions: teamRole.permissions,
     })
     .from(revision)
-    .innerJoin(projectMember, eq(projectMember.projectId, revision.projectId))
+    .leftJoin(
+      projectMember,
+      and(eq(projectMember.projectId, revision.projectId), eq(projectMember.userId, userId)),
+    )
     .leftJoin(teamRole, eq(teamRole.id, projectMember.roleId))
     .where(
       and(
@@ -62,7 +62,7 @@ export async function readRevs(
           revision.scope,
           wanted.map((w) => w.key),
         ),
-        eq(projectMember.userId, userId),
+        admin ? undefined : eq(projectMember.userId, userId),
       ),
     );
 
@@ -70,7 +70,7 @@ export async function readRevs(
   const out: Record<string, string> = {};
   for (const row of rows) {
     const resource = resources.get(row.scope);
-    if (resource) {
+    if (resource && !admin) {
       const { permissions } = toMemberContext(row.role as MemberRole, row.permissions);
       if (!hasPermission(permissions, resource, 'read')) continue;
     }

@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, spyOn } from 'bun:test';
 import {
+  getUpdateStatus,
+  releasesSince,
   parseVersion,
   compareVersions,
   parseReleasesAtom,
@@ -182,5 +184,32 @@ describe('mergeHistory', () => {
   it('falls back to the changelog alone when the feed could not be read', () => {
     const local = [release('0.2.0', 'markdown'), release('0.1.0', 'markdown')];
     expect(mergeHistory([], local)).toEqual(local);
+  });
+});
+
+describe('disabled update checks', () => {
+  it('serves bundled history without outbound requests even for a forced check', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalEnabled = process.env.UPDATE_CHECKS_ENABLED;
+    const fetchSpy = spyOn(globalThis, 'fetch');
+    try {
+      process.env.NODE_ENV = 'production';
+      for (const value of [undefined, '', '0']) {
+        if (value === undefined) delete process.env.UPDATE_CHECKS_ENABLED;
+        else process.env.UPDATE_CHECKS_ENABLED = value;
+        const status = await getUpdateStatus(true);
+        expect(status.checkedAt).toBeNull();
+        expect(status.latestVersion).toBeNull();
+        expect(status.releases.length).toBeGreaterThan(0);
+        await releasesSince(null);
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalNodeEnv;
+      if (originalEnabled === undefined) delete process.env.UPDATE_CHECKS_ENABLED;
+      else process.env.UPDATE_CHECKS_ENABLED = originalEnabled;
+      fetchSpy.mockRestore();
+    }
   });
 });

@@ -44,6 +44,7 @@ export type TeamRole = 'owner' | 'manager' | 'member';
 // standing in the team is 'agent' and says nothing about what it may do — that is the
 // role each of its project memberships carries.
 export interface TeamMember {
+  roleId: number | null;
   userId: string;
   name: string;
   email: string;
@@ -204,10 +205,24 @@ export const renameTeam = (teamId: number, input: { name: string }) =>
 export const leaveTeam = (teamId: number) =>
   request<void>(`/teams/${teamId}/leave`, { method: 'POST' });
 
-export const setTeamMemberRole = (teamId: number, userId: string, role: TeamRole) =>
+export const addTeamMember = (
+  teamId: number,
+  input: { email: string; role: TeamRole; roleId?: number | null },
+) =>
+  request<{ userId: string }>(`/teams/${teamId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+
+export const setTeamMemberRole = (
+  teamId: number,
+  userId: string,
+  role: TeamRole,
+  roleId?: number | null,
+) =>
   request<void>(`/teams/${teamId}/members/${userId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({ role, roleId }),
   });
 
 export const removeTeamMember = (teamId: number, userId: string) =>

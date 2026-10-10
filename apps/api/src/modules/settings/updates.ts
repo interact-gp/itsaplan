@@ -156,7 +156,7 @@ let feed: FeedRead | null = null;
 async function publishedReleases(force = false): Promise<FeedRead | null> {
   // The suite must not depend on github.com being reachable, and the same
   // NODE_ENV already gates the db reset helper.
-  if (process.env.NODE_ENV === 'test') return null;
+  if (process.env.NODE_ENV === 'test' || process.env.UPDATE_CHECKS_ENABLED !== '1') return null;
   if (!force && feed && Date.now() - Date.parse(feed.readAt) < FEED_TTL_MS) return feed;
   try {
     feed = { releases: await readFeed(), readAt: new Date().toISOString() };

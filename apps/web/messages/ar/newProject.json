@@ -46,5 +46,8 @@
   "copyTitle": "نسخ المشروع \"{name}\"",
   "create": "إنشاء مشروع",
   "copyAction": "نسخ المشروع",
-  "copyName": "نسخة {name}"
+  "copyName": "نسخة {name}",
+  "team": "Team",
+  "chooseTeam": "Choose a team",
+  "noTeamAccess": "Ask a team owner for permission to create projects."
 }

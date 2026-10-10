@@ -12,8 +12,7 @@ import {
 } from './telemetry-schedule';
 import pkg from '../../../package.json';
 
-// Sends one anonymous snapshot of this instance a day. TELEMETRY.md documents what
-// goes out and how to turn it off (TELEMETRY_DISABLED=1 / DO_NOT_TRACK=1).
+// Opt-in daily usage reporting. See TELEMETRY.md for the payload.
 
 const ENDPOINT = 'https://telemetry.itsaplan.dev/v1/telemetry';
 const TIMEOUT_MS = 10_000;
@@ -44,13 +43,13 @@ let state: State | null = null;
 let failures = 0;
 let retryAfterMs = 0;
 
-// Any value but '' and '0' opts out; compose passes an unset variable through as ''.
+// DO_NOT_TRACK follows the cross-tool opt-out convention.
 function optedOut(value: string | undefined): boolean {
   return value !== undefined && value !== '' && value !== '0';
 }
 
 function telemetryEnabled(): boolean {
-  return !optedOut(process.env.TELEMETRY_DISABLED) && !optedOut(process.env.DO_NOT_TRACK);
+  return process.env.TELEMETRY_DISABLED === '0' && !optedOut(process.env.DO_NOT_TRACK);
 }
 
 async function instanceId(): Promise<string> {

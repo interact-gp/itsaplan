@@ -1,6 +1,6 @@
-import { aiAgent, db, issueWatcher, projectMember, user, userPreference } from '@repo/db';
+import { aiAgent, db, issueWatcher, user, userPreference } from '@repo/db';
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
-import { getMemberContext, listMemberContexts, type MemberContext } from '#modules/members/service';
+import { getMemberContext, type MemberContext } from '#modules/members/service';
 import { hasPermission } from '#shared/permissions';
 
 // Who follows an issue. A watcher receives every notification the issue produces
@@ -25,8 +25,7 @@ function canReadWorkItems(context: MemberContext | null | undefined): boolean {
   );
 }
 
-// The issue's watchers, by name. A watcher who has left the project is left out;
-// their row survives, so rejoining puts them back on the list.
+// Subscription rows survive loss of access; only currently authorized people are returned.
 export async function listIssueWatchers(
   projectId: number,
   issueId: number,
@@ -35,17 +34,20 @@ export async function listIssueWatchers(
     .select({ userId: issueWatcher.userId, name: user.name, image: user.image })
     .from(issueWatcher)
     .innerJoin(user, eq(user.id, issueWatcher.userId))
-    .innerJoin(
-      projectMember,
-      and(eq(projectMember.userId, issueWatcher.userId), eq(projectMember.projectId, projectId)),
-    )
     .leftJoin(aiAgent, eq(aiAgent.userId, issueWatcher.userId))
     .where(
-      and(eq(issueWatcher.issueId, issueId), eq(issueWatcher.subscribed, true), isNull(aiAgent.id)),
+      and(
+        eq(issueWatcher.issueId, issueId),
+        eq(issueWatcher.subscribed, true),
+        isNull(aiAgent.id),
+        eq(user.active, true),
+      ),
     )
     .orderBy(asc(user.name));
-  const contexts = await listMemberContexts(projectId);
-  return rows.filter((row) => canReadWorkItems(contexts.get(row.userId)));
+  const eligible = await Promise.all(
+    rows.map(async (row) => canReadWorkItems(await getMemberContext(projectId, row.userId))),
+  );
+  return rows.filter((_, index) => eligible[index]);
 }
 
 export async function watcherUserIds(projectId: number, issueId: number): Promise<Set<string>> {
@@ -53,24 +55,14 @@ export async function watcherUserIds(projectId: number, issueId: number): Promis
   return new Set(rows.map((r) => r.userId));
 }
 
-// Watchers represent people who receive the project's human notifications. An AI
-// agent also has a project_member row, so checking that table alone would make it
-// look like a valid target; the anti-join keeps the management endpoint human-only.
+// Watchers receive human notifications, so agent identities are excluded.
 export async function isEligibleIssueWatcher(projectId: number, userId: string): Promise<boolean> {
-  const rows = await db
-    .select({ userId: projectMember.userId })
-    .from(projectMember)
-    .leftJoin(aiAgent, eq(aiAgent.userId, projectMember.userId))
-    .where(
-      and(
-        eq(projectMember.projectId, projectId),
-        eq(projectMember.userId, userId),
-        isNull(aiAgent.id),
-      ),
-    )
-    .limit(1);
-  if (rows.length === 0) return false;
-  return canReadWorkItems(await getMemberContext(projectId, userId));
+  const [person] = await db
+    .select({ id: user.id })
+    .from(user)
+    .leftJoin(aiAgent, eq(aiAgent.userId, user.id))
+    .where(and(eq(user.id, userId), eq(user.active, true), isNull(aiAgent.id)));
+  return !!person && canReadWorkItems(await getMemberContext(projectId, userId));
 }
 
 // Subscribes or unsubscribes one member by hand. Both states are stored, so an
@@ -89,11 +81,7 @@ export async function setIssueWatching(
     });
 }
 
-// Subscribes the members that just acted on the issue in a way that implies they
-// want to follow it: they created it, were assigned it, commented on it, or were
-// mentioned in a comment. A candidate that is not a human member of the project
-// or that turned auto-subscribe off is skipped. `on conflict do nothing` is what makes an
-// unsubscription stick: the row is there with subscribed = false and stays.
+// Existing subscriptions are never overwritten, so an explicit unsubscribe survives later activity.
 export async function autoWatchIssue(
   projectId: number,
   issueId: number,
@@ -102,22 +90,24 @@ export async function autoWatchIssue(
   const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
   if (ids.length === 0) return;
   const rows = await db
-    .select({ userId: projectMember.userId })
-    .from(projectMember)
-    .leftJoin(userPreference, eq(userPreference.userId, projectMember.userId))
-    .leftJoin(aiAgent, eq(aiAgent.userId, projectMember.userId))
+    .select({ userId: user.id })
+    .from(user)
+    .leftJoin(userPreference, eq(userPreference.userId, user.id))
+    .leftJoin(aiAgent, eq(aiAgent.userId, user.id))
     .where(
       and(
-        eq(projectMember.projectId, projectId),
-        inArray(projectMember.userId, ids),
+        inArray(user.id, ids),
+        eq(user.active, true),
         isNull(aiAgent.id),
         // No preference row yet means the default, which is on.
         or(isNull(userPreference.autoWatch), eq(userPreference.autoWatch, true)),
       ),
     );
   if (rows.length === 0) return;
-  const contexts = await listMemberContexts(projectId);
-  const eligible = rows.filter((row) => canReadWorkItems(contexts.get(row.userId)));
+  const allowed = await Promise.all(
+    rows.map(async (row) => canReadWorkItems(await getMemberContext(projectId, row.userId))),
+  );
+  const eligible = rows.filter((_, index) => allowed[index]);
   if (eligible.length === 0) return;
   await db
     .insert(issueWatcher)

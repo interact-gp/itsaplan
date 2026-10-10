@@ -2,6 +2,8 @@ import { intEnv } from '#shared/lib';
 import { agentRunConfig } from '#modules/agents/core/run-queue';
 import { processAgentRuns } from '#modules/agents/core/run-poller';
 import { sweepStaleIssues } from '#modules/issues/auto-archive';
+import { syncKeycloakAccess } from '#modules/organization/keycloak';
+import { managedAccess } from '@repo/db';
 
 // The api's background jobs, started by index.ts rather than assembled into the app,
 // so importing the app in a test starts nothing. Several api replicas run them without
@@ -12,6 +14,7 @@ import { sweepStaleIssues } from '#modules/issues/auto-archive';
 // can carry thousands of issues, so sharing one loop would let either hold the other
 // back for that long.
 export function startBackgroundJobs(): void {
+  if (managedAccess()) startLoop('organization-access', syncKeycloakAccess, () => 15_000);
   startLoop('agent-runs', processAgentRuns, agentRunConfig.pollIntervalMs);
   // Archiving is not time-sensitive, so the sweep runs far less often than the queue
   // is drained.

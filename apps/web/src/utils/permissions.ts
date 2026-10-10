@@ -99,7 +99,7 @@ const GROUP_DEFS: PermissionGroup[] = [
     ],
   },
   { key: 'members', resources: ['members_manage', 'members_invite'] },
-  { key: 'project', resources: ['danger_zone'] },
+  { key: 'project', resources: ['projects', 'danger_zone'] },
 ];
 
 // Order the catalog's resources into display groups. A resource not covered by

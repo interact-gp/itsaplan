@@ -31,6 +31,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import TeamInviteDialog from './TeamInviteDialog';
 import TeamInviteRow from './TeamInviteRow';
 import TeamMemberRow from './TeamMemberRow';
+import TeamAddMemberForm from './TeamAddMemberForm';
 
 // The team's members, a page at a time, with the invites that have not been answered
 // yet above them. People and agents work on one board, so both are listed and the tabs
@@ -98,6 +99,7 @@ export default function TeamMembersSection({ teamId }: { teamId: number }) {
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {canInvite && <TeamAddMemberForm teamId={teamId} />}
         <Tabs value={kind} onValueChange={onKindChange}>
           <div className="flex items-center justify-between gap-3">
             <TabsList variant="line" className="w-auto border-b-0">

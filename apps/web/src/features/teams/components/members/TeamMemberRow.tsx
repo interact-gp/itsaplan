@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { TableCell, TableRow } from '@/components/ui/table';
 import MemberProvisionedBadge from '@/components/common/MemberProvisionedBadge';
 import TeamMemberRoleControl from './TeamMemberRoleControl';
+import TeamMemberCustomRoleControl from './TeamMemberCustomRoleControl';
 
 // One row of the team member list. An agent is a member like a person, with two
 // differences: it is addressed by its handle rather than an email, and the role column
@@ -60,6 +61,13 @@ export default function TeamMemberRow({
           viewerRole={viewerRole}
           self={self}
         />
+        {!isAgent && member.role === 'member' && (
+          <TeamMemberCustomRoleControl
+            teamId={teamId}
+            member={member}
+            canManage={!self && (viewerRole === 'owner' || viewerRole === 'manager')}
+          />
+        )}
       </TableCell>
       <TableCell className="px-3 py-3 text-sm text-muted-foreground">
         {formatDate(member.joinedAt)}

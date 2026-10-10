@@ -22,6 +22,7 @@ import { runsTeam, teamMcpEnabled } from '#modules/teams/service';
 import { isMcpRequest } from './mcp-request';
 import { HttpError } from './lib';
 import type { PermissionResource, PermissionAction } from './permissions';
+import { managedAccess, organizationAccess } from '@repo/db';
 
 // A [resource, action] pair naming one cell of the role permission matrix.
 export type Permission = [PermissionResource, PermissionAction];
@@ -75,7 +76,10 @@ export function entityGuard(
   feature?: ProjectFeature,
 ) {
   return (action: PermissionAction) => ({
-    ...permissionDetail([resource, action]),
+    detail: {
+      'x-permission': [resource, action],
+      ...(feature ? { 'x-feature': feature } : {}),
+    } as DocumentDecoration,
     async resolve({ params, user, request }: EntityGuardCtx) {
       const projectId = await resolveProjectId(params as Record<string, string>);
       if (projectId == null) throw new HttpError(404, notFound);
@@ -138,6 +142,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // Bare membership: any member of the project may proceed.
   projectMember(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'project-member' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const project = await requireProjectAccess((params as ProjectKeyParams).projectKey, user);
         assertMcpEnabled(project, isMcpRequest(request.headers));
@@ -153,6 +158,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // already requires membership — not on one a team owner reaches without it.
   feature(name: ProjectFeature) {
     return {
+      detail: { 'x-feature': name } as DocumentDecoration,
       async resolve({ params, user }) {
         const project = await requireProjectAccess((params as ProjectKeyParams).projectKey, user);
         assertFeatureEnabled(project, name);
@@ -182,6 +188,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // check.
   projectOwner(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'project-owner' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const project = await requireProjectOwner((params as ProjectKeyParams).projectKey, user);
         assertMcpEnabled(project, isMcpRequest(request.headers));
@@ -194,6 +201,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // owner and the team that runs it both govern.
   projectAdmin(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'project-admin' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const project = await requireProjectAdmin((params as ProjectKeyParams).projectKey, user);
         assertMcpEnabled(project, isMcpRequest(request.headers));
@@ -206,6 +214,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // than any project role: copying the project into one of their own.
   teamRunsProject(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'team-manager' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const project = await requireTeamRunsProject((params as ProjectKeyParams).projectKey, user);
         assertMcpEnabled(project, isMcpRequest(request.headers));
@@ -252,10 +261,24 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
     };
   },
 
+  organizationAdmin(_enabled: boolean) {
+    return {
+      detail: { 'x-access': 'organization-admin' } as DocumentDecoration,
+      async resolve({ user }) {
+        if (!user) throw new HttpError(401, 'Authentication required');
+        if (managedAccess() && user.role !== 'god' && !(await organizationAccess(user.id)).admin) {
+          throw new HttpError(403, 'Only an organization admin can do this');
+        }
+        return {};
+      },
+    };
+  },
+
   // Any member of the team may proceed. The team macros inject the resolved
   // `membership` into the handler context.
   teamMember(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'team-member' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const membership = await resolveTeam(params, user);
         await assertTeamMcpAllowed(params, request.headers);
@@ -269,6 +292,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // that it belongs to it.
   teamManager(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'team-manager' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const membership = await resolveTeam(params, user);
         if (!runsTeam(membership.role))
@@ -304,6 +328,7 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
   // resolved before the owner check.
   teamOwner(_enabled: boolean) {
     return {
+      detail: { 'x-access': 'team-owner' } as DocumentDecoration,
       async resolve({ params, user, request }) {
         const membership = await resolveTeam(params, user);
         if (membership.role !== 'owner') throw new HttpError(403, 'Only a team owner can do this');

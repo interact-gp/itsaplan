@@ -23,7 +23,8 @@
     "actions": "Tindakan",
     "webhooks": "Webhook",
     "note_boards": "Papan catatan",
-    "danger_zone": "Zona bahaya"
+    "danger_zone": "Zona bahaya",
+    "projects": "Projects in this team"
   },
   "actions": {
     "create": "Buat",

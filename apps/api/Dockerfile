@@ -35,6 +35,8 @@ RUN bun install --frozen-lockfile $INSTALL_FILTER $INSTALL_FLAGS
 # clobber the copied dependencies.
 FROM base AS release
 ENV NODE_ENV=production
+ENV BETTER_AUTH_TELEMETRY=false MASTRA_TELEMETRY_DISABLED=1
+ENV UPDATE_CHECKS_ENABLED=0 MODEL_CATALOG_ENABLED=0
 # pg_dump, for the backup migrate.ts takes before it applies anything. The package
 # tracks the Postgres the compose file runs (17), and a client older than the server
 # refuses to dump, so an instance on a newer server needs a newer image or

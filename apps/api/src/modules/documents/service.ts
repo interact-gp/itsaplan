@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import {
   db,
   documentAsset,
@@ -108,7 +109,8 @@ export interface DocumentAssetRow {
   createdAt: string;
 }
 
-function documentAccess(userId: string) {
+async function documentAccess(userId: string) {
+  if (await isOrganizationAdmin(userId)) return undefined;
   return or(eq(projectDocument.isPrivate, false), eq(projectDocument.ownerUserId, userId));
 }
 
@@ -234,7 +236,7 @@ export async function listDocuments(
   const term = options.q?.trim();
   const conditions = [
     eq(projectDocument.projectId, projectId),
-    documentAccess(userId),
+    await documentAccess(userId),
     options.archived ? isNotNull(projectDocument.archivedAt) : isNull(projectDocument.archivedAt),
   ];
   if (term) {
@@ -272,7 +274,7 @@ async function selectDocument(
       and(
         eq(projectDocument.id, documentId),
         eq(projectDocument.projectId, projectId),
-        documentAccess(userId),
+        await documentAccess(userId),
       ),
     );
   return row ?? null;
@@ -413,7 +415,7 @@ async function visibleDocumentParentId(
       and(
         eq(projectDocument.id, parentId),
         eq(projectDocument.projectId, projectId),
-        documentAccess(userId),
+        await documentAccess(userId),
       ),
     );
   return parent?.id ?? null;
@@ -440,7 +442,7 @@ async function assertValidParent(
         archivedAt: projectDocument.archivedAt,
       })
       .from(projectDocument)
-      .where(and(eq(projectDocument.id, cursor), documentAccess(userId)));
+      .where(and(eq(projectDocument.id, cursor), await documentAccess(userId)));
     if (!parent || parent.projectId !== projectId) {
       throw new HttpError(400, 'Parent document must belong to the same project');
     }
@@ -1062,7 +1064,11 @@ async function ownedDocument(
 ) {
   const current = await selectDocument(executor, projectId, documentId, userId);
   if (!current) return null;
-  if (current.ownerUserId !== userId && !(isProjectOwner && !current.isPrivate)) {
+  if (
+    current.ownerUserId !== userId &&
+    !(isProjectOwner && !current.isPrivate) &&
+    !(await isOrganizationAdmin(userId))
+  ) {
     throw new HttpError(403, 'Only the document owner can change this setting.');
   }
   return current;
@@ -1091,6 +1097,7 @@ export async function setDocumentAccess(
       .update(projectDocument)
       .set({
         isPrivate,
+        ownerUserId: isPrivate ? (current.ownerUserId ?? userId) : current.ownerUserId,
         updatedByUserId: userId,
         updatedAt: sql`now()`,
         version: sql`${projectDocument.version} + 1`,
@@ -1185,7 +1192,7 @@ async function documentSubtreeIds(
   const rows = await executor
     .select({ id: projectDocument.id, parentId: projectDocument.parentId })
     .from(projectDocument)
-    .where(and(eq(projectDocument.projectId, projectId), documentAccess(userId)));
+    .where(and(eq(projectDocument.projectId, projectId), await documentAccess(userId)));
   const ids = new Set<number>([documentId]);
   let changed = true;
   while (changed) {
@@ -1286,7 +1293,7 @@ export async function restoreDocument(
       const [parent] = await tx
         .select({ archivedAt: projectDocument.archivedAt })
         .from(projectDocument)
-        .where(and(eq(projectDocument.id, current.parentId), documentAccess(userId)));
+        .where(and(eq(projectDocument.id, current.parentId), await documentAccess(userId)));
       detachFromParent = !parent || parent.archivedAt !== null;
     }
     const [row] = await tx
@@ -1477,10 +1484,12 @@ export async function listDocumentRevisions(
     .where(
       and(
         eq(projectDocumentRevision.documentId, documentId),
-        or(
-          eq(projectDocumentRevision.isPrivate, false),
-          eq(projectDocumentRevision.ownerUserId, userId),
-        ),
+        (await isOrganizationAdmin(userId))
+          ? undefined
+          : or(
+              eq(projectDocumentRevision.isPrivate, false),
+              eq(projectDocumentRevision.ownerUserId, userId),
+            ),
       ),
     )
     .orderBy(desc(projectDocumentRevision.version));
@@ -1502,10 +1511,12 @@ export async function getDocumentRevision(
       and(
         eq(projectDocumentRevision.id, revisionId),
         eq(projectDocumentRevision.documentId, documentId),
-        or(
-          eq(projectDocumentRevision.isPrivate, false),
-          eq(projectDocumentRevision.ownerUserId, userId),
-        ),
+        (await isOrganizationAdmin(userId))
+          ? undefined
+          : or(
+              eq(projectDocumentRevision.isPrivate, false),
+              eq(projectDocumentRevision.ownerUserId, userId),
+            ),
       ),
     );
   if (!row) return null;
@@ -1557,14 +1568,20 @@ export async function restoreDocumentRevision(
         and(
           eq(projectDocumentRevision.id, revisionId),
           eq(projectDocumentRevision.documentId, documentId),
-          or(
-            eq(projectDocumentRevision.isPrivate, false),
-            eq(projectDocumentRevision.ownerUserId, userId),
-          ),
+          (await isOrganizationAdmin(userId))
+            ? undefined
+            : or(
+                eq(projectDocumentRevision.isPrivate, false),
+                eq(projectDocumentRevision.ownerUserId, userId),
+              ),
         ),
       );
     if (!revision) throw new HttpError(404, 'Document revision not found');
-    if (revision.isPrivate && (revision.ownerUserId !== userId || current.ownerUserId !== userId)) {
+    if (
+      revision.isPrivate &&
+      (revision.ownerUserId !== userId || current.ownerUserId !== userId) &&
+      !(await isOrganizationAdmin(userId))
+    ) {
       throw new HttpError(403, 'Only the current document owner can restore a private revision.');
     }
     assertValidDocumentContentJson(revision.contentJson);
@@ -1589,7 +1606,9 @@ export async function restoreDocumentRevision(
         // A historical secret may never be restored into a public current row.
         // Restoring a public snapshot into a private page keeps the safer current
         // access level instead of unexpectedly publishing it.
-        ...(revision.isPrivate ? { isPrivate: true } : {}),
+        ...(revision.isPrivate
+          ? { isPrivate: true, ownerUserId: current.ownerUserId ?? userId }
+          : {}),
         updatedByUserId: userId,
         updatedAt: sql`now()`,
         version: sql`${projectDocument.version} + 1`,

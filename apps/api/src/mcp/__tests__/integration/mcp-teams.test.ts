@@ -6,6 +6,8 @@ import { signUpTestUser } from '#tests/helpers/auth';
 import { createAgent, setAgentProjectRole, teamOf } from '#tests/helpers/agents';
 import { createRole } from '#tests/helpers/roles';
 import { getAgentById, getInternalAgentApiKey } from '#modules/agents/core/service';
+import { authorizedTools } from '../../catalogue';
+import { routeTools } from '../../generate';
 
 // Agent management is a team operation, but an MCP client knows only projects. The
 // team is resolved from the key instead of asked for; this covers who gets to name
@@ -127,5 +129,99 @@ describe('MCP team resolution', () => {
 
     const { text } = await call(personKey, 'list_teams');
     expect(JSON.parse(text).map((team: { name: string }) => team.name)).toContain('Second Team');
+  });
+});
+
+describe('MCP planning discovery', () => {
+  beforeEach(resetDb);
+
+  it('limits fallback recommendations to the caller and rejects another project scope', async () => {
+    const owner = await signUpTestUser({ name: 'Owner' });
+    const asOwner = authedApi(owner.cookie);
+    const project = await asOwner.projects.post({ key: 'MKT', name: 'Marketing' });
+    const other = await signUpTestUser({ name: 'Other', email: 'other@example.com' });
+    const foreign = await authedApi(other.cookie).projects.post({ key: 'OPS', name: 'Ops' });
+    const key = (await auth.api.createApiKey({ body: { userId: owner.userId, name: 'discovery' } }))
+      .key;
+    const previousKey = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    try {
+      const result = await call(key, 'discover_tools', {
+        request: 'create issue',
+        projectId: project.data!.id,
+      });
+      expect(result.isError).toBe(false);
+      const payload = JSON.parse(result.text);
+      expect(payload.source).toBe('fallback');
+      expect(payload.tools.map((tool: { name: string }) => tool.name)).toContain('create_issue');
+      expect(
+        payload.tools.every(
+          (tool: { name: string }) =>
+            !tool.name.includes('agent') && !tool.name.includes('credential'),
+        ),
+      ).toBe(true);
+      const denied = await call(key, 'discover_tools', {
+        request: 'create issue',
+        projectId: foreign.data!.id,
+      });
+      const missing = await call(key, 'discover_tools', {
+        request: 'create issue',
+        projectId: 999999,
+      });
+      expect(denied.isError).toBe(true);
+      expect(denied.text).toBe(missing.text);
+      expect((await call(key, 'discover_tools', { request: '   ' })).isError).toBe(true);
+    } finally {
+      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousKey;
+    }
+  });
+
+  it('filters custom project permissions and disabled project features before ranking', async () => {
+    const { owner: projectOwner, asOwner, agentKey } = await setup();
+    const project = await asOwner.projects({ projectKey: 'MKT' }).get();
+    const agent = (await asOwner.teams({ teamId: await teamOf(asOwner, 'MKT') })['ai-agents'].get())
+      .data![0]!;
+    const candidates = await authorizedTools(routeTools(app), agent.userId, {
+      projectId: project.data!.project.id,
+    });
+    expect(candidates.map((tool) => tool.name)).not.toContain('create_issue');
+    expect(candidates.map((tool) => tool.name)).not.toContain('delete_project');
+    const updated = await asOwner
+      .projects({ projectKey: 'MKT' })
+      .settings.patch({ features: { dashboards: false } });
+    expect(updated.status).toBe(200);
+    const disabled = await authorizedTools(routeTools(app), projectOwner.userId, {
+      projectId: project.data!.project.id,
+    });
+    expect(disabled.map((tool) => tool.name)).not.toContain('create_dashboard');
+    const owner = await signUpTestUser({ name: 'Separate', email: 'separate@example.com' });
+    const own = await authedApi(owner.cookie).projects.post({ key: 'OWN', name: 'Own' });
+    const enabled = await authorizedTools(routeTools(app), owner.userId, {
+      projectId: own.data!.id,
+    });
+    expect(enabled.map((tool) => tool.name)).toContain('create_dashboard');
+    const keyResult = await call(agentKey, 'discover_tools', {
+      request: 'create issue',
+      projectId: own.data!.id,
+    });
+    expect(keyResult.isError).toBe(true);
+  });
+
+  it('does not recommend project tools after the team MCP switch is disabled', async () => {
+    const owner = await signUpTestUser({ name: 'Owner' });
+    const client = authedApi(owner.cookie);
+    const project = await client.projects.post({ key: 'MKT', name: 'Marketing' });
+    const teamId = await teamOf(client, 'MKT');
+    const key = (await auth.api.createApiKey({ body: { userId: owner.userId, name: 'discovery' } }))
+      .key;
+    const updated = await client.teams({ teamId }).mcp.patch({ enabled: false });
+    expect(updated.status).toBe(200);
+    const result = await call(key, 'discover_tools', {
+      request: 'create issue',
+      projectId: project.data!.id,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toBe('Discovery scope not found');
   });
 });

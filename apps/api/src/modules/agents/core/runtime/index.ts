@@ -16,6 +16,8 @@ import { errorMessage } from '../helpers/errors';
 import { projectPreamble } from '../prompt/framing';
 import { HttpError } from '#shared/lib';
 
+process.env.MASTRA_TELEMETRY_DISABLED = '1';
+
 // Runtime execution of internal agents via Mastra. An agent is built on demand
 // from its stored configuration (provider/model/instructions) and run against a
 // prompt. It is given the work-item system tools for the project the run works in

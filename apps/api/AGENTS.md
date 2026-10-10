@@ -103,9 +103,12 @@ Enforced declaratively through macros, never imperative calls in handlers.
   `user` on context, throws 401 with none. `planner.ts` gates every planner route;
   a feature also `.use(authContext)` when its handlers/macros reference `user`. An
   `x-api-key` header resolves through `getSession` — no special-casing.
-- **Membership:** access is strictly by a `project_member` row (`owner` | `member`).
+- **Membership:** a `project_member` row (`owner` | `member`) grants project access.
   Owners bypass the permission matrix; the global `user.role` (`god` | `user`) does
-  **not**. Keep at least one owner per project.
+  **not**. In managed-access mode, fresh organization administrators have full instance,
+  team and project access without membership rows. This applies only to active human
+  accounts and preserves MCP switches, source-managed memberships and last-owner checks.
+  Keep at least one owner per project.
 - **`:projectKey` routes:** `.use(guards)` and set `permission: ["<resource>",
 "<action>"]` / `projectMember: true` / `projectOwner: true`; read the resolved
   `project` from context.

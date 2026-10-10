@@ -1,4 +1,12 @@
-import { db, teamRole, projectMember, aiAgent, teamInvite, scimGroupMapping } from '@repo/db';
+import {
+  db,
+  teamRole,
+  teamMember,
+  projectMember,
+  aiAgent,
+  teamInvite,
+  scimGroupMapping,
+} from '@repo/db';
 import { and, asc, count, eq, ilike, isNull, sql } from 'drizzle-orm';
 import { iso } from '#shared/lib';
 import { normalizePermissions, type Permissions } from '#shared/permissions';
@@ -132,7 +140,7 @@ export interface RoleUsage {
 }
 
 export async function getRoleUsage(roleId: number): Promise<RoleUsage> {
-  const [members, agents, invites, groups] = await Promise.all([
+  const [members, agents, invites, groups, teamMembers] = await Promise.all([
     db
       .select({ n: count() })
       .from(projectMember)
@@ -150,9 +158,10 @@ export async function getRoleUsage(roleId: number): Promise<RoleUsage> {
       .from(teamInvite)
       .where(and(eq(teamInvite.roleId, roleId), eq(teamInvite.status, 'pending'))),
     db.select({ n: count() }).from(scimGroupMapping).where(eq(scimGroupMapping.roleId, roleId)),
+    db.select({ n: count() }).from(teamMember).where(eq(teamMember.roleId, roleId)),
   ]);
   return {
-    members: members[0].n,
+    members: members[0].n + teamMembers[0].n,
     agents: agents[0].n,
     invites: invites[0].n,
     groups: groups[0].n,
@@ -183,6 +192,7 @@ export async function deleteRole(
       .update(teamInvite)
       .set({ roleId: targetRoleId })
       .where(and(eq(teamInvite.roleId, roleId), eq(teamInvite.status, 'pending')));
+    await tx.update(teamMember).set({ roleId: targetRoleId }).where(eq(teamMember.roleId, roleId));
     await tx
       .update(scimGroupMapping)
       .set({ roleId: targetRoleId })

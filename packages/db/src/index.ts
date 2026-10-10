@@ -1,6 +1,7 @@
 export { db } from './client';
 export * from './schema';
 export * from './permissions';
+export * from './organization';
 export { getSetting, getOrCreateSetting, setSetting } from './settings';
 export { readSecret, writeSecret } from './secrets';
 export {

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Plus, SquareKanban } from 'lucide-react';
 import { useProjectsQuery } from '@/services/projects.service';
 import { useAccountPreferencesQuery } from '@/services/preferences.service';
-import { startPagePath, projectPath } from '@/utils/paths';
+import { startPagePath, projectPath, manageTeamsPath } from '@/utils/paths';
 import NewProjectModal from '@/components/layout/NewProjectModal';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +26,7 @@ import {
 export default function Home() {
   const t = useTranslations('shell');
   const tCommon = useTranslations('common');
+  const tNav = useTranslations('nav');
   const router = useRouter();
   const { data: projects } = useProjectsQuery();
   const { data: prefs, isPending: prefsPending } = useAccountPreferencesQuery();
@@ -53,6 +55,9 @@ export default function Home() {
             <EmptyDescription>{t('noProjectsHint')}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
+            <Button asChild variant="outline">
+              <Link href={manageTeamsPath()}>{tNav('manageTeams')}</Link>
+            </Button>
             <Button onClick={() => setCreating(true)}>
               <Plus />
               {t('createProject')}

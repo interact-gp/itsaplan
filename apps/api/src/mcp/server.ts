@@ -8,6 +8,10 @@ import { dispatchTool } from './dispatch';
 import { SERVER_INSTRUCTIONS } from './instructions';
 import type { McpCredential } from './credential';
 import { toolError } from './result';
+import { managedAccess } from '@repo/db';
+import { authorizedTools } from './catalogue';
+import { discoverTools, discoveryTool } from './discovery';
+import { HttpError } from '#shared/lib';
 
 // The path param of every team-scoped route.
 const TEAM_PARAM = 'teamId';
@@ -26,8 +30,8 @@ async function callerTeam(userId: string): Promise<number | null> {
   return teams.length === 1 ? teams[0].id : null;
 }
 
-// A low-level MCP Server for one request. tools/list returns every route tagged
-// with x-mcp; tools/call dispatches to the real route via app.handle with the
+// A low-level MCP Server for one request. Managed tools/list filters the tagged
+// routes by current access; tools/call dispatches via app.handle with the
 // caller's API key. The low-level Server (not McpServer) is used so the route's
 // TypeBox JSON Schema can be served as the tool inputSchema without converting to
 // Zod. Arguments are validated by the route itself, not here.
@@ -46,26 +50,47 @@ export async function buildMcpServer(
     { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
-  const table = routeTools(app);
+  const routes = routeTools(app);
+  const table = managedAccess() ? await authorizedTools(routes, userId) : routes;
   const byName = new Map(table.map((t) => [t.name, t]));
-  const teamId = await callerTeam(userId);
+  const teamId = managedAccess() ? null : await callerTeam(userId);
   const needsTeam = (tool: McpRouteTool) => tool.pathParams.includes(TEAM_PARAM);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: table.map((t) => ({
-      name: t.name,
-      description: t.description,
-      // A caller whose team is already known does not get to name one.
-      inputSchema:
-        teamId !== null && needsTeam(t)
-          ? withoutFields(t.inputSchema, [TEAM_PARAM])
-          : t.inputSchema,
-      annotations: t.annotations,
-      outputSchema: t.outputSchema,
-    })),
+    tools: [
+      discoveryTool,
+      ...table.map((t) => ({
+        name: t.name,
+        description: t.description,
+        // A caller whose team is already known does not get to name one.
+        inputSchema:
+          teamId !== null && needsTeam(t)
+            ? withoutFields(t.inputSchema, [TEAM_PARAM])
+            : t.inputSchema,
+        annotations: t.annotations,
+        outputSchema: t.outputSchema,
+      })),
+    ],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    if (req.params.name === discoveryTool.name) {
+      try {
+        const result = await discoverTools(routes, userId, req.params.arguments ?? {});
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        const status = error instanceof HttpError ? error.status : 500;
+        const text = error instanceof HttpError ? error.message : 'Discovery unavailable';
+        return {
+          content: [{ type: 'text', text }],
+          isError: true,
+          structuredContent: toolError(status, text),
+        };
+      }
+    }
     const tool = byName.get(req.params.name);
     if (!tool) {
       const text = `Unknown tool: ${req.params.name}`;

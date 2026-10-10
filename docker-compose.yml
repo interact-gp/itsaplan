@@ -87,6 +87,15 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 3000
+      BETTER_AUTH_TELEMETRY: 'false'
+      MASTRA_TELEMETRY_DISABLED: '1'
+      UPDATE_CHECKS_ENABLED: ${UPDATE_CHECKS_ENABLED:-0}
+      MODEL_CATALOG_ENABLED: ${MODEL_CATALOG_ENABLED:-0}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ITSAPLAN_MANAGED_ACCESS: ${ITSAPLAN_MANAGED_ACCESS:-false}
+      ITSAPLAN_KEYCLOAK_ISSUER: ${ITSAPLAN_KEYCLOAK_ISSUER:-}
+      ITSAPLAN_KEYCLOAK_CLIENT_ID: ${ITSAPLAN_KEYCLOAK_CLIENT_ID:-}
+      ITSAPLAN_KEYCLOAK_CLIENT_SECRET: ${ITSAPLAN_KEYCLOAK_CLIENT_SECRET:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-itsaplan}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-itsaplan}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
       # Encrypts stored provider credentials at rest (AES-256-GCM). Changing it
@@ -147,10 +156,8 @@ services:
       # provider credentials stored in the database — encrypted with this key, the
       # same value the api uses.
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
-      # Anonymous telemetry (TELEMETRY.md). Either variable, set to anything but 0,
-      # turns it off.
-      TELEMETRY_DISABLED: ${TELEMETRY_DISABLED:-}
-      DO_NOT_TRACK: ${DO_NOT_TRACK:-}
+      TELEMETRY_DISABLED: ${TELEMETRY_DISABLED:-1}
+      DO_NOT_TRACK: ${DO_NOT_TRACK:-1}
       TELEMETRY_DEBUG: ${TELEMETRY_DEBUG:-}
       # The same list the api reads. This process delivers webhooks to those hosts.
       SSRF_ALLOWED_HOSTS: ${SSRF_ALLOWED_HOSTS:-}

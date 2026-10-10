@@ -4,6 +4,8 @@ import { auth, withMcpAuth } from '@repo/auth';
 import { buildMcpServer } from './server';
 import type { McpApp } from './types';
 import type { McpCredential } from './credential';
+import { db, managedAccess, hasApplicationAccess, user } from '@repo/db';
+import { eq } from 'drizzle-orm';
 
 // The API key on the request. MCP clients send Authorization: Bearer <key>;
 // x-api-key is also accepted (the REST convention). Returns null when absent.
@@ -31,6 +33,22 @@ export function mountMcp(app: any): void {
     '/mcp',
     async ({ request, body }: { request: Request; body: unknown }) => {
       const serve = async (credential: McpCredential, userId: string) => {
+        if (managedAccess()) {
+          const [person] = await db
+            .select({ active: user.active, role: user.role })
+            .from(user)
+            .where(eq(user.id, userId));
+          if (
+            !person ||
+            person.active === false ||
+            (person.role !== 'god' && !(await hasApplicationAccess(userId)))
+          ) {
+            return Response.json(
+              { error: 'Application access has not been granted' },
+              { status: 403 },
+            );
+          }
+        }
         const server = await buildMcpServer(mcpApp, credential, userId);
         const transport = new WebStandardStreamableHTTPServerTransport({
           sessionIdGenerator: undefined,

@@ -1,3 +1,4 @@
+import { isOrganizationAdmin } from '@repo/db';
 import { Elysia, t } from 'elysia';
 import { mcpTool } from '#mcp/generate';
 import { noContent } from '#shared/http';
@@ -6,6 +7,7 @@ import { authContext } from '#shared/auth-context';
 import { guards } from '#shared/guards';
 import { requireUser } from '#shared/access';
 import { isMcpRequest } from '#shared/mcp-request';
+import { managedAccess } from '@repo/db';
 import { accessErrors, commonErrors, errors } from '#shared/responses';
 import { getMemberContext, listAssigneeCandidates } from '#modules/members/service';
 import { listColumns } from '#modules/columns/service';
@@ -73,6 +75,7 @@ export const projectRoutes = new Elysia({ name: 'projects', detail: { tags: ['Pr
   .post(
     '/projects',
     async ({ body, user, set }) => {
+      if (managedAccess()) throw new HttpError(400, 'Choose a team to create the project in');
       set.status = 201;
       return createProject(body, requireUser(user).id);
     },
@@ -160,7 +163,10 @@ export const projectRoutes = new Elysia({ name: 'projects', detail: { tags: ['Pr
         assignees,
         customFields,
         issueTemplates,
-        viewer: { role: viewer.role, teamRole },
+        viewer: {
+          role: viewer.role,
+          teamRole: (await isOrganizationAdmin(userId)) ? 'owner' : teamRole,
+        },
         permissions: viewer.permissions,
       };
     },

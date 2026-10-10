@@ -95,12 +95,6 @@ import {
   UpdateStatusSchema,
 } from '#modules/settings/model';
 
-// God mode: instance-wide administration, open only to the "god" user (the first
-// registered account). It covers how people may register, the mail provider that
-// sends authentication email, the OAuth credentials, and SCIM provisioning. Invites
-// are per team (team_invite), managed in the team panel and in the project's Members
-// section — there is nothing instance-level to add here.
-//
 // The settings themselves are owned by @repo/auth, which reads them at sign-up and
 // when sending mail; these routes only expose them over HTTP. Secrets are never
 // returned — each is replaced by a boolean telling whether a value is stored.
@@ -125,8 +119,8 @@ export const godRoutes = new Elysia({ name: 'god', detail: { tags: ['God'] } })
   .use(authContext)
   // Every route in this plugin is instance administration, so the role check runs
   // once here instead of per route.
-  .onBeforeHandle(({ user }) => {
-    requireGod(user);
+  .onBeforeHandle(async ({ user }) => {
+    await requireGod(user);
   })
 
   .get(
@@ -193,7 +187,7 @@ export const godRoutes = new Elysia({ name: 'god', detail: { tags: ['God'] } })
   .post(
     '/god/email-settings/test',
     async ({ user, body: patch }) => {
-      const current = requireGod(user);
+      const current = await requireGod(user);
       if (!current.email) throw new HttpError(400, 'The instance owner has no email address');
       const config = await resolveEmailConfig(patch ?? {});
       if (!hasEmailProvider(config)) {

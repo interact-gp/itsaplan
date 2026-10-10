@@ -23,7 +23,8 @@
     "actions": "操作",
     "webhooks": "Webhook",
     "note_boards": "便签板",
-    "danger_zone": "危险操作"
+    "danger_zone": "危险操作",
+    "projects": "Projects in this team"
   },
   "actions": {
     "create": "新建",

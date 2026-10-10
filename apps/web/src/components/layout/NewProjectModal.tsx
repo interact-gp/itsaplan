@@ -3,6 +3,8 @@ import { Users } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCreateProject } from '@/services/projects.service';
 import { useTeamsQuery } from '@/services/teams.service';
+import { useOrganizationAccessQuery } from '@/services/organization.service';
+import NewProjectTeamPicker from './NewProjectTeamPicker';
 import { normalizeKey, suggestKey } from '@/utils/projectKey';
 import type { PresetKey } from '@/utils/projectPresets';
 import Modal from '@/components/common/overlay/Modal';
@@ -41,8 +43,11 @@ export default function NewProjectModal({
   // source project, so the preset applies only when creating from scratch.
   const [preset, setPreset] = useState<PresetKey>('general');
   const createProject = useCreateProject();
+  const access = useOrganizationAccessQuery();
+  const [selectedTeamId, setSelectedTeamId] = useState<number | undefined>(teamId);
+  const targetTeamId = teamId ?? selectedTeamId;
   // Names the team in the header, so the dialog says where the project lands.
-  const team = useTeamsQuery().data?.find((one) => one.id === teamId);
+  const team = useTeamsQuery().data?.find((one) => one.id === targetTeamId);
 
   function onNameChange(value: string) {
     setName(value);
@@ -63,7 +68,7 @@ export default function NewProjectModal({
       ...(copyFrom ? { include } : { preset }),
     };
     createProject.mutate(
-      { teamId, copyFromId: copyFrom?.id, input },
+      { teamId: targetTeamId, copyFromId: copyFrom?.id, input },
       { onSuccess: (project) => onCreated(project.key) },
     );
   }
@@ -84,6 +89,9 @@ export default function NewProjectModal({
       className="pb-3"
     >
       <div className="flex min-h-0 flex-col">
+        {access.data?.managed && teamId == null && (
+          <NewProjectTeamPicker value={selectedTeamId} onChange={setSelectedTeamId} />
+        )}
         {/* On a short viewport the form scrolls on its own so the submit button
             stays in place instead of sitting below the fold. */}
         <div className="max-h-[55vh] overflow-y-auto pr-1">
@@ -113,7 +121,12 @@ export default function NewProjectModal({
         </div>
         <div className="mt-4 flex justify-end border-t pt-3">
           <Button
-            disabled={createProject.isPending || !key.trim() || !name.trim()}
+            disabled={
+              createProject.isPending ||
+              !key.trim() ||
+              !name.trim() ||
+              (access.data?.managed && targetTeamId == null)
+            }
             onClick={submit}
           >
             {t(copyFrom ? 'copyAction' : 'create')}

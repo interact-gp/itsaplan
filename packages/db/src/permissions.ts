@@ -5,6 +5,7 @@
 // in @repo/auth, which seeds a new team's default role, write it.
 
 export const PERMISSION_RESOURCES = [
+  'projects',
   'work_items',
   'initiatives',
   'cycles',
@@ -42,6 +43,7 @@ export type Permissions = Record<PermissionResource, ResourcePermissions>;
 // action. Unsupported cells stay present and false, so a caller reads any cell
 // without a lookup.
 const RESOURCE_ACTIONS: Partial<Record<PermissionResource, readonly PermissionAction[]>> = {
+  projects: ['create'],
   danger_zone: ['read', 'delete'],
   workflow_config: ['read', 'edit'],
   members_invite: ['read', 'create', 'delete'],

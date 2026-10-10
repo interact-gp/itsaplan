@@ -1,4 +1,12 @@
-import { db, aiAgent, projectMember, scimGroup, scimGroupMember, user } from '@repo/db';
+import {
+  db,
+  aiAgent,
+  managedAccess,
+  projectMember,
+  scimGroup,
+  scimGroupMember,
+  user,
+} from '@repo/db';
 import { and, eq, inArray, notExists, sql } from 'drizzle-orm';
 import { generateUsername } from '@repo/auth';
 import { iso } from '#shared/lib';
@@ -123,7 +131,12 @@ export async function createScimUser(input: {
 }): Promise<ScimUserRecord> {
   const email = input.email.trim().toLowerCase();
   const existing = await db
-    .select({ id: user.id, role: user.role, scimExternalId: user.scimExternalId })
+    .select({
+      id: user.id,
+      role: user.role,
+      scimExternalId: user.scimExternalId,
+      emailVerified: user.emailVerified,
+    })
     .from(user)
     .where(and(emailEq(email), notAnAgent));
   if (existing[0]) {
@@ -143,6 +156,9 @@ export async function createScimUser(input: {
         `A user with userName '${input.email}' already exists`,
         'uniqueness',
       );
+    }
+    if (managedAccess() && !existing[0].emailVerified) {
+      throw new ScimError(409, 'An unverified existing account requires administrator resolution');
     }
     // Otherwise this address belongs to an account that predates the sync —
     // created by a sign-up or an OIDC sign-in — so provisioning claims it instead
@@ -177,7 +193,7 @@ export async function createScimUser(input: {
     const row = inserted[0]!;
     // A project belongs to a team, so without one of its own the account could only
     // work in the projects its groups grant, and creating a project would fail.
-    await insertOwnedTeam(tx, username, row.id);
+    if (!managedAccess()) await insertOwnedTeam(tx, username, row.id);
     return row;
   });
   return toUserRecord(created);

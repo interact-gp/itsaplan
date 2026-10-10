@@ -1,4 +1,4 @@
-import { db, appSetting, userPreference } from '@repo/db';
+import { isOrganizationAdmin, db, appSetting, userPreference } from '@repo/db';
 import { eq, sql } from 'drizzle-orm';
 import type { AuthUser } from '#shared/access';
 import { getAppVersion, releasesSince, type Release } from './updates';
@@ -7,10 +7,7 @@ import { getAppVersion, releasesSince, type Release } from './updates';
 // database dump taken before its migrations is, and what the migrations did to this
 // instance's data.
 //
-// The dump and the data report are administration: they name the projects, roles and
-// agents of the whole instance, so only its owner reads them. Team ownership is not
-// the line to draw here — every account is given a team of its own at registration,
-// which would make that everyone.
+// Backup and migration details require instance administration access.
 
 const MIGRATION_REPORT_KEY = 'migration.teams';
 // The migration is matched by name, not by its number: a merge from main renumbers the
@@ -61,7 +58,7 @@ export async function getWhatsNew(user: AuthUser): Promise<WhatsNew> {
     .select({ seenVersion: userPreference.seenVersion })
     .from(userPreference)
     .where(eq(userPreference.userId, user.id));
-  const admin = user.role === 'god';
+  const admin = user.role === 'god' || (await isOrganizationAdmin(user.id));
   const releases = await releasesSince(preference?.seenVersion ?? null);
   const [backup, applied] = admin
     ? await Promise.all([

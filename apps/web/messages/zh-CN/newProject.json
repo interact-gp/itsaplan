@@ -46,5 +46,8 @@
   "copyTitle": "复制项目“{name}”",
   "create": "新建项目",
   "copyAction": "复制项目",
-  "copyName": "{name} 副本"
+  "copyName": "{name} 副本",
+  "team": "Team",
+  "chooseTeam": "Choose a team",
+  "noTeamAccess": "Ask a team owner for permission to create projects."
 }

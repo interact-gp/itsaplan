@@ -1,12 +1,30 @@
-# Telemetry
+# Telemetry and external requests
 
-A self-hosted instance sends one snapshot of itself a day. It tells the project which
-versions are still running, which features get used, and where deliveries fail on
-machines nobody reports from.
+Usage telemetry is disabled by default. With telemetry disabled, the worker does
+not read usage counters, create a telemetry instance id, or contact the collector.
+Better Auth and Mastra usage telemetry are disabled. Next.js telemetry is disabled
+in the web image. No browser analytics or external error-reporting service is configured.
 
-Telemetry is on by default. Everything it sends is listed below.
+Automatic GitHub release checks and models.dev model suggestions are disabled by
+default. Set `UPDATE_CHECKS_ENABLED=1` or `MODEL_CATALOG_ENABLED=1` to enable them.
+Release notes remain available from the bundled changelog; model ids can be entered
+manually. These metadata requests disclose server IP and request timing.
 
-## When it is sent
+Configured integrations send data when used: identity-provider authentication, mail,
+Telegram, webhooks, repository operations and AI providers. JEV tool discovery uses
+OpenRouter when `OPENROUTER_API_KEY` is configured. It sends the discovery request
+and candidate tool names/descriptions permitted for that user, without loading
+stored project contents or forwarding authentication credentials. Request text can
+include sensitive information supplied by the caller. Without that key, discovery
+uses local lexical matching. OpenRouter retention is governed by its service terms;
+this application does not enforce provider zero-retention controls.
+
+External markdown images and media can contact their hosts from the browser. Link
+previews contact the requested hosts from the server. Interactive API documentation
+at `/docs` and `/api/auth/reference` loads Scalar JavaScript from jsDelivr. These
+functional requests are separate from usage telemetry.
+
+## When opt-in telemetry is sent
 
 The first snapshot goes out when the worker starts, so an instance that is set up and
 removed the same hour is still counted once. After that each instance picks one minute
@@ -16,18 +34,18 @@ spreads the traffic instead of every instance reporting at midnight UTC.
 A send that fails is retried with a growing delay for five attempts, then once an hour.
 The worker logs each failure and carries on with its other work.
 
-## Turning it off
+## Enabling usage telemetry
 
-Set either variable in `.env`:
+To enable reporting with deployment defaults, set both:
 
 ```bash
-TELEMETRY_DISABLED=1
-# or the cross-tool convention, read the same way:
-DO_NOT_TRACK=1
+TELEMETRY_DISABLED=0
+DO_NOT_TRACK=0
 ```
 
-Any value except `0` (and an empty one) turns telemetry off. Nothing is sent after
-that, and no instance id is generated.
+An unset or empty `TELEMETRY_DISABLED` keeps telemetry off. Any nonempty
+`DO_NOT_TRACK` value except `0` prevents reporting. Deployment defaults set both
+variables to `1`. The sections below describe reporting only when enabled.
 
 ## Seeing what is sent
 

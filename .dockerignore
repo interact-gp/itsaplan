@@ -4,8 +4,12 @@
 **/.turbo
 .git
 .gitignore
-**/.env
-**/.env.local
+**/.env*
+**/.local
+**/.codex
+**/.workspace
+**/.claude
 **/*.log
 **/.DS_Store
 README.md
+**/__pycache__
