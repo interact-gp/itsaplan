@@ -56,12 +56,25 @@ async function listed(key: string) {
 }
 
 describe('managed organization access', () => {
+  const keycloakEnv = {
+    ITSAPLAN_KEYCLOAK_ISSUER: 'https://keycloak.invalid/realms/test',
+    ITSAPLAN_KEYCLOAK_CLIENT_ID: 'test-client',
+    ITSAPLAN_KEYCLOAK_CLIENT_SECRET: 'test-secret',
+  };
+  const originalKeycloakEnv = Object.fromEntries(
+    Object.keys(keycloakEnv).map((key) => [key, process.env[key]]),
+  );
   beforeEach(async () => {
     process.env.ITSAPLAN_MANAGED_ACCESS = 'false';
+    Object.assign(process.env, keycloakEnv);
     await resetDb();
   });
   afterEach(() => {
     process.env.ITSAPLAN_MANAGED_ACCESS = 'false';
+    for (const [key, value] of Object.entries(originalKeycloakEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
   async function actors() {

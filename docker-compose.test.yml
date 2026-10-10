@@ -20,6 +20,8 @@ name: itsaplan-test
 services:
   postgres-test:
     image: postgres:17-alpine
+    # Frequent truncation retains relation files until the next checkpoint.
+    command: postgres -c checkpoint_timeout=30s -c max_wal_size=128MB -c min_wal_size=32MB
     environment:
       POSTGRES_USER: itsaplan
       POSTGRES_PASSWORD: itsaplan
@@ -37,7 +39,9 @@ services:
   # Throwaway MinIO for the attachments feature test (object bytes). Ephemeral:
   # /data is tmpfs, wiped when the run ends.
   minio-test:
-    image: quay.io/minio/minio:latest
+    build:
+      context: ./deploy/test
+      dockerfile: minio.Dockerfile
     command: server /data
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -47,7 +51,9 @@ services:
 
   # One-shot: waits for MinIO, creates the attachments bucket, then exits.
   minio-test-init:
-    image: quay.io/minio/mc:latest
+    build:
+      context: ./deploy/test
+      dockerfile: mc.Dockerfile
     depends_on:
       - minio-test
     entrypoint: >
