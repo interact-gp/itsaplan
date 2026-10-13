@@ -4,7 +4,7 @@ import { user as users } from '@repo/db/schema';
 import { eq } from 'drizzle-orm';
 import { auth, getSessionFromHeaders } from '@repo/auth';
 import { HttpError } from './lib';
-import { getMcpOAuthToken } from './mcp-request';
+import { getActingUser, getMcpOAuthToken } from './mcp-request';
 
 // GET routes that need no session. The raw attachment and avatar bytes routes
 // must work in <img>/<video> and external fetches. The invite lookup
@@ -48,19 +48,30 @@ export const authContext = new Elysia({ name: 'auth-context' }).resolve(
         headers: new Headers({ Authorization: `Bearer ${mcpToken}` }),
       });
       if (oauthSession) {
-        const user = await db.query.user.findFirst({ where: eq(users.id, oauthSession.userId) });
-        if (user) {
-          if (user.active === false) throw new HttpError(401, 'This account is deactivated');
-          await assertOrganizationAccess(user);
-          return { user: user as SessionUser };
-        }
+        const user = await activeUser(oauthSession.userId);
+        if (user) return { user };
       }
+    }
+    const actingUserId = getActingUser(request);
+    if (actingUserId) {
+      const user = await activeUser(actingUserId);
+      if (user) return { user };
     }
     // The public raw-attachment route has no session and needs none.
     if (request.method === 'GET' && PUBLIC_GET.test(path)) return { user: null };
     throw new HttpError(401, 'Authentication required');
   },
 );
+
+// The account behind userId when it may use the app, undefined when it does not exist;
+// throws 401 or 403 when it is deactivated or has no application access.
+export async function activeUser(userId: string): Promise<SessionUser | undefined> {
+  const user = await db.query.user.findFirst({ where: eq(users.id, userId) });
+  if (!user) return undefined;
+  if (user.active === false) throw new HttpError(401, 'This account is deactivated');
+  await assertOrganizationAccess(user);
+  return user as SessionUser;
+}
 
 async function assertOrganizationAccess(user: { id: string; role?: string | null }) {
   if (managedAccess() && user.role !== 'god' && !(await hasApplicationAccess(user.id))) {
