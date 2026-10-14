@@ -568,5 +568,31 @@ describe('Slack bot', () => {
         'I can only add tasks to existing projects',
       );
     });
+
+    it('refuses to create a project or change members for an organization admin', async () => {
+      const { owner, asOwner, teamId } = await world();
+      const admin = await signUpTestUser({ name: 'Admin' });
+      await verified(admin, 'UADMIN');
+      await managed([
+        [owner, 'member'],
+        [admin, 'admin'],
+      ]);
+      const asAdmin = authedApi(admin.cookie);
+      const team = (await asOwner.teams({ teamId }).get()).data!;
+      const projectsBefore = (await asAdmin.projects.get()).data!.length;
+      const membersBefore = (await asOwner.projects({ projectKey: 'MKT' }).members.get()).data;
+
+      await deliver(mention('UADMIN', `create a project called Mobile app in ${team.name}`));
+      await deliver(mention('UADMIN', 'make a new project for the launch'));
+
+      expect((await asAdmin.projects.get()).data).toHaveLength(projectsBefore);
+      expect((await asOwner.projects({ projectKey: 'MKT' }).members.get()).data).toEqual(
+        membersBefore,
+      );
+      expect(await issues(asOwner)).toHaveLength(0);
+      expect(replies('chat.postMessage')).toHaveLength(0);
+      for (const reply of replies('chat.postEphemeral'))
+        expect(reply.text).toContain('I can only add tasks to existing projects');
+    });
   });
 });
