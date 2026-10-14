@@ -88,11 +88,8 @@ function stubFetch() {
       const { messages } = JSON.parse(String(init?.body)) as {
         messages: { role: string; content: string }[];
       };
-      const content = messages[0]!.content.includes('project this Slack request asks to create')
-        ? { key: 'MOB', name: 'Mobile app' }
-        : { title };
-      if ('title' in content) titleRequests.push(messages[1]!.content);
-      return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
+      titleRequests.push(messages[1]!.content);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ title }) } }] });
     }
     throw new Error(`unexpected fetch ${url}`);
   }) as typeof fetch);
@@ -384,14 +381,14 @@ describe('Slack bot', () => {
       expect(titleRequests.at(-1)).toBe('create a task in MKT to fix the footer');
     });
 
-    it('does not take a channel answer once the question is old', async () => {
+    it('does not take a channel answer once the question is old, nor make it a task', async () => {
       const { asOwner } = await world();
       jev = { tool: 'create_issue' };
       await deliver(mention('UOWNER', 'create a task to fix push notifications'));
       await db.update(slackEvent).set({ createdAt: new Date(Date.now() - 11 * 60_000) });
       await deliver(mention('UOWNER', 'OPS'));
-      expect(titleRequests.at(-1)).toBe('OPS');
-      expect(await issues(asOwner, 'OPS')).toHaveLength(1);
+      expect(await issues(asOwner, 'OPS')).toHaveLength(0);
+      expect(replies('chat.postEphemeral').at(-1)!.text).toContain('No request is waiting');
     });
 
     it('completes a waiting request once when two answers arrive together', async () => {
@@ -559,32 +556,17 @@ describe('Slack bot', () => {
   });
 
   describe('creating a project', () => {
-    it('lets a team owner create a project in their team', async () => {
+    it('refuses to create a project, even for a team owner', async () => {
       const { asOwner, teamId } = await world();
       const team = (await asOwner.teams({ teamId }).get()).data!;
-      jev = { tool: 'create_team_project', team: String(teamId) };
+      const before = (await asOwner.projects.get()).data!.length;
       await deliver(mention('UOWNER', `create a project called Mobile app in ${team.name}`));
-      const project = await asOwner.projects({ projectKey: 'MOB' }).get();
-      expect(project.status).toBe(200);
-      expect(project.data!.project.name).toBe('Mobile app');
-      expect(replies('chat.postMessage')[0]!.text).toContain('Created project');
-    });
-
-    it('says once that projects need the AI service when it is not configured', async () => {
-      const { asOwner, teamId } = await world();
-      delete process.env.OPENROUTER_API_KEY;
-      const team = (await asOwner.teams({ teamId }).get()).data!;
-      await deliver(mention('UOWNER', `create a project called Mobile app in ${team.name}`));
-      expect((await asOwner.projects({ projectKey: 'MOB' }).get()).status).toBe(404);
-      const [reply] = replies('chat.postEphemeral');
-      expect(reply!.text).toContain('needs the AI service');
-    });
-
-    it('denies a member without project-create permission', async () => {
-      const { asOwner, teamId } = await world();
-      jev = { tool: 'create_team_project', team: String(teamId) };
-      await deliver(mention('UMEMBER', 'create a project called Mobile app'));
-      expect((await asOwner.projects({ projectKey: 'MOB' }).get()).status).toBe(404);
+      expect((await asOwner.projects.get()).data).toHaveLength(before);
+      expect(await issues(asOwner)).toHaveLength(0);
+      expect(replies('chat.postMessage')).toHaveLength(0);
+      expect(replies('chat.postEphemeral')[0]!.text).toContain(
+        'I can only add tasks to existing projects',
+      );
     });
   });
 });

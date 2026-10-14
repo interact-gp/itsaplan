@@ -3,18 +3,16 @@ import { authorizedTools } from '#mcp/catalogue';
 import { dispatchTool } from '#mcp/dispatch';
 import { routeTools, type McpRouteTool } from '#mcp/generate';
 import { activeUser } from '#shared/auth-context';
-import { getMembership, getTeamPermissions } from '#modules/members/service';
+import { getMembership } from '#modules/members/service';
 import { getProjectByKey, listProjects } from '#modules/projects/service';
-import { listTeams } from '#modules/teams/service';
 import { escapeSlack, postDirect, postInThread, postPrivately } from './client';
 import {
+  asksForProject,
   bareAnswer,
   interpret,
   issueTitle,
   plainRequest,
-  projectFields,
   type ProjectOption,
-  type TeamOption,
 } from './interpret';
 import {
   defaultColumnId,
@@ -27,7 +25,8 @@ import {
   type SlackMention,
 } from './service';
 
-const ACTIONS = new Set(['create_issue', 'create_team_project']);
+// The only thing the bot does: add a task to an existing project.
+const ACTION = 'create_issue';
 const MENTION = /<@([A-Z0-9]+)(?:\|[^>]*)?>/g;
 
 interface Outcome {
@@ -87,19 +86,6 @@ async function creatableProjects(userId: string): Promise<ProjectOption[]> {
     .map((p) => ({ key: p.key, name: p.name, teamName: p.teamName }));
 }
 
-async function creatableTeams(userId: string): Promise<TeamOption[]> {
-  const teams = await listTeams(userId, { mcpOnly: true });
-  const allowed = await Promise.all(
-    teams.map(
-      async (team) =>
-        team.role === 'owner' ||
-        team.role === 'manager' ||
-        (team.role === 'member' && (await getTeamPermissions(team.id, userId)).projects.create),
-    ),
-  );
-  return teams.filter((_, i) => allowed[i]).map((team) => ({ id: team.id, name: team.name }));
-}
-
 export async function handleMention(mention: SlackMention, botUserId: string | undefined) {
   const { channelId, threadTs, slackUserId } = mention;
   // Slack hides a private message in a thread that has no other replies, so an answer to
@@ -124,113 +110,68 @@ export async function handleMention(mention: SlackMention, botUserId: string | u
   const finish = (status: SlackEventStatus, extra: Outcome = {}) =>
     finishSlackEvent(mention.eventId, { status, userId, request, ...extra });
 
-  const app = getMcpApp();
-  const tools = await authorizedTools(
-    routeTools(app).filter((tool) => ACTIONS.has(tool.name)),
+  const [tool] = await authorizedTools(
+    routeTools(getMcpApp()).filter((t) => t.name === ACTION),
     userId,
   );
-  if (!tools.length) {
+  if (!tool) {
     await finish('refused');
     await tell(
-      'You cannot create tasks or projects through me: none of your projects or teams allow it with AI access (MCP) turned on.',
+      'You cannot add tasks through me: none of your projects allow it with AI access (MCP) turned on.',
     );
     return;
   }
-  const allowed = (name: string) => tools.find((tool) => tool.name === name);
-  const projects = allowed('create_issue') ? await creatableProjects(userId) : [];
-  const teams = allowed('create_team_project') ? await creatableTeams(userId) : [];
+  const projects = await creatableProjects(userId);
 
   const pending = await findPendingRequest(mention);
-  if (pending && (inThread || bareAnswer(text, projects, teams))) {
+  if (pending && (inThread || bareAnswer(text, projects))) {
     if (!(await claimPendingRequest(pending.eventId))) {
       await finish('refused');
       return;
     }
     request = `${pending.request}\n${text}`;
-  }
-
-  const intent = await interpret(request, tools, projects, teams);
-  const tool = intent.action ? allowed(intent.action) : undefined;
-  if (!tool) {
+  } else if (bareAnswer(text, projects)) {
+    // Only a project name, with no question waiting for it (or another answer took
+    // it first): there is no task to create.
     await finish('refused');
     await tell(
-      intent.action
-        ? 'You do not have permission to do that.'
-        : 'I can create a task ("create a task in PROJECT to …") or a project ("create a project called … in TEAM"). I could not tell which one you meant.',
+      'No request is waiting for a project. Write the whole request, for example "create a task in PROJECT to …".',
     );
     return;
   }
 
-  if (intent.action === 'create_issue') {
-    if (!intent.project) {
-      await finish('clarify');
-      await tell(
-        projects.length
-          ? `Which project should the task go in? Mention me again with one of: ${projects.map((p) => `${p.key} (${escapeSlack(p.name)})`).join(', ')}.`
-          : 'There is no project where you can create tasks through me.',
-      );
-      return;
-    }
-    // A project the sender did not name may be one the channel cannot see, so only the
-    // sender is told where the task went.
-    const announce = intent.named
-      ? (message: string) => postInThread(channelId, threadTs, message)
-      : tell;
-    await createIssue(
-      mention,
-      userId,
-      request,
-      tool,
-      intent.project,
-      botUserId,
-      finish,
-      tell,
-      announce,
-    );
+  if (asksForProject(request)) {
+    await finish('refused');
+    await tell('I can only add tasks to existing projects ("create a task in PROJECT to …").');
     return;
   }
 
-  if (intent.action === 'create_team_project') {
-    if (!intent.team) {
-      await finish('clarify');
-      await tell(
-        `Which team should the project be in? Mention me again with one of: ${teams.map((t) => escapeSlack(t.name)).join(', ')}.`,
-      );
-      return;
-    }
-    if (!process.env.OPENROUTER_API_KEY) {
-      await finish('refused');
-      await tell('Creating a project through me needs the AI service, which is not set up here.');
-      return;
-    }
-    const fields = await projectFields(request);
-    if (!fields) {
-      await finish('clarify');
-      await tell(
-        'What should the project be called, and what key should it have? Reply in the thread of your message and mention me, for example "key MOB, name Mobile app".',
-      );
-      return;
-    }
-    const result = await dispatchTool(
-      app,
-      tool,
-      { teamId: intent.team.id, key: fields.key, name: fields.name },
-      { kind: 'user', userId },
-      { viaMcpEndpoint: true },
+  const intent = await interpret(request, projects);
+  if (!intent.project) {
+    await finish('clarify');
+    await tell(
+      projects.length
+        ? `Which project should the task go in? Mention me again with one of: ${projects.map((p) => `${p.key} (${escapeSlack(p.name)})`).join(', ')}.`
+        : 'There is no project where you can create tasks through me.',
     );
-    if (result.isError) {
-      await finish('failed');
-      await tell(`I could not create the project: ${routeError(result.text)}.`);
-      return;
-    }
-    const created = JSON.parse(result.text) as { id: number; key: string; name: string };
-    await finish('done', { projectId: created.id });
-    await postInThread(
-      channelId,
-      threadTs,
-      `Created project ${link(appUrl(`/project/${created.key}`), created.key)}: ${escapeSlack(created.name)}`,
-    );
+    return;
   }
+  // A project the sender did not name may be one the channel cannot see, so only the
+  // sender is told where the task went.
+  const announce = intent.named
+    ? (message: string) => postInThread(channelId, threadTs, message)
+    : tell;
+  await createIssue(
+    mention,
+    userId,
+    request,
+    tool,
+    intent.project,
+    botUserId,
+    finish,
+    tell,
+    announce,
+  );
 }
 
 async function createIssue(

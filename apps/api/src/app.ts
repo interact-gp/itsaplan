@@ -134,7 +134,7 @@ export const app = new Elysia()
           },
           {
             name: 'Slack',
-            description: 'Slack bot: @mentions that create tasks and projects as the sender',
+            description: 'Slack bot: @mentions that add tasks to projects as the sender',
           },
           { name: 'Agent Schedules', description: 'Recurring tasks for internal agents' },
           { name: 'Dashboards', description: 'Saved analytics dashboards' },

@@ -77,7 +77,7 @@ export const slackRoutes = new Elysia({ name: 'slack', detail: { tags: ['Slack']
       summary: 'Receive a Slack event',
       description:
         'Receive Slack Events API deliveries, verify them against the Slack signing secret, and ' +
-        'create the task or project an @mention asks for, as the Slack user who sent it.',
+        'create the task an @mention asks for, as the Slack user who sent it.',
     },
   },
 );

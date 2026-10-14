@@ -1,15 +1,16 @@
 # Slack bot
 
 People in the instance Slack workspace mention the bot in a channel it was invited to,
-and it creates a task or a project as them:
+and it adds a task to an existing project as them:
 
 ```
 @Itsaplan create a task in MKT to fix push notifications and assign @Ayush
-@Itsaplan create a project called Mobile app in Growth
 ```
 
-The bot acts with the sender's own access. It can do nothing the sender could not do in
-the web app over MCP, and it never adds anyone to a team or project.
+Adding tasks is the only thing it does. It does not create projects or teams, and it
+performs no administration: it never adds anyone to a team or project or changes a
+setting. It acts with the sender's own access, so it can do nothing the sender could not
+do in the web app over MCP.
 
 ## How a mention is handled
 
@@ -19,17 +20,18 @@ the web app over MCP, and it never adds anyone to a team or project.
 2. The sender is matched to an account by the email on their Slack profile, which must
    be the verified email of an active account with application access. The match is
    stored in `user_slack_account`. An email written in a message is never used.
-3. Jev chooses the action and the target project or team, only among the ones the
-   sender may use with MCP turned on. A project key written in capitals is taken directly,
-   and so is a project or team name that follows "in" ("in Growth") or is the whole
-   answer to the bot's question. A name used as an ordinary word elsewhere in the message
-   is left to Jev. When the target is unclear, the bot asks privately to the sender. The
+3. A request for a new project is refused. Otherwise Jev chooses the project, only among
+   the ones the sender may add tasks to with MCP turned on. A project key written in
+   capitals is taken directly, and so is a project name that follows "in" ("in Growth")
+   or is the whole answer to the bot's question. A name used as an ordinary word
+   elsewhere in the message is left to Jev. When the project is unclear, the bot asks
+   privately to the sender. The
    next mention in the thread of the request completes it. So does a mention in the
    channel within ten minutes that is only a project key or name ("@Itsaplan OPS"); a
    longer message there is a new request. The question is posted in the channel when the
    request was, because Slack does not show a private message in a thread that has no
    other replies. Two answers handled at the same time complete the request once.
-4. The task or project is created through the same route the web app and MCP use, as the
+4. The task is created through the same route the web app and MCP use, as the
    sender, so the route checks the account, the permission and the MCP switch again.
 5. A tagged assignee must be an active member of the project, or nothing is created.
 6. The bot replies with the link and sends the assignee a direct message. The reply is
@@ -37,11 +39,10 @@ the web app over MCP, and it never adds anyone to a team or project.
    when Jev chose it. Questions and refusals are always visible only to the sender, since
    they can name projects other people in the channel cannot see.
 
-The task title, and the key and name of a new project, are written by
-`anthropic/claude-haiku-5.5` through OpenRouter, with the same `OPENROUTER_API_KEY` as Jev.
-Without the key, the bot still creates tasks: it takes a project only when the message
-names it as described in step 3, and the title is the message text. It does not create
-projects without the key.
+The task title is written by `anthropic/claude-haiku-5.5` through OpenRouter, with the
+same `OPENROUTER_API_KEY` as Jev. Without the key, the bot still creates tasks: it takes a
+project only when the message names it as described in step 3, and the title is the
+message text.
 
 Text from a message or a model is escaped before the bot posts it, so it cannot ping a
 channel or show a disguised link.
@@ -67,7 +68,7 @@ channel or show a disguised link.
 ```yaml
 display_information:
   name: Itsaplan
-  description: Create Itsaplan tasks and projects from Slack
+  description: Add Itsaplan tasks from Slack
 features:
   app_home:
     messages_tab_enabled: true
