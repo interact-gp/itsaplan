@@ -146,6 +146,8 @@
     },
     "autoWatch": "Ikuti issue secara otomatis",
     "autoWatchDescription": "Issue yang Anda buat, ditugaskan kepada Anda, Anda komentari, atau yang menyebut Anda.",
+    "slackReminders": "Pengingat Slack",
+    "slackRemindersDescription": "Pesan Slack pribadi berisi item Tugas saya yang belum dicentang dan pekerjaan terbuka yang ditugaskan kepada Anda, dikirim saat jadwal pengingat berjalan.",
     "showChatByDefault": "Tampilkan obrolan secara bawaan",
     "showChatByDefaultDescription": "Panel obrolan terbuka bersama halaman proyek. Tutup kapan saja dari bilah judul atau ikon obrolan."
   }

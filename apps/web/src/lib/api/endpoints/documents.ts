@@ -22,6 +22,8 @@ export interface ProjectDocumentSummary {
   fullWidth: boolean;
   isPrivate: boolean;
   isLocked: boolean;
+  // A member's own "My To-do" page: always private, never handed over or published.
+  personal: boolean;
   isFavorite: boolean;
   archivedAt: string | null;
   position: number;

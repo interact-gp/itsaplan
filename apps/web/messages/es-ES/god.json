@@ -220,6 +220,21 @@
     "botTokenHint": "El token se verifica con Telegram cuando guardas, así que uno erróneo se rechaza aquí en lugar de fallar en silencio más tarde.",
     "resolvedHint": "Resuelto del token. Este es el bot que las personas verán al conectar."
   },
+  "slackReminders": {
+    "saved": "Programa de recordatorios guardado",
+    "schedule": "Programa",
+    "scheduleHint": "Cada persona recibe un mensaje privado de Slack con sus tareas sin marcar de Mis tareas y su trabajo asignado abierto. Cada persona puede desactivarlo en sus preferencias.",
+    "slackMissing": "El bot de Slack no está configurado en este servidor. Configura primero SLACK_BOT_TOKEN y SLACK_TEAM_ID.",
+    "cron": "Programa cron",
+    "cronHint": "Cinco campos: minuto, hora, día del mes, mes, día de la semana. Como máximo una vez por hora.",
+    "timezone": "Zona horaria",
+    "nextRun": "Próxima ejecución: {when}",
+    "off": "Los recordatorios están desactivados. No se envía nada de forma programada.",
+    "privacy": "Cada mensaje va solo al MD de Slack de esa persona. Slack lo conserva según la política de retención del espacio de trabajo.",
+    "sendTest": "Enviarme una prueba",
+    "testSent": "Prueba enviada a tu MD de Slack",
+    "testNotSent": "No se envió nada: {outcome}"
+  },
   "email": {
     "saved": "El proveedor de correo se ha guardado",
     "provider": "Proveedor de correo",

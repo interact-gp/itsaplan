@@ -45,6 +45,7 @@ function projectDocument(version: number, content: string): ProjectDocument {
     fullWidth: false,
     isPrivate: false,
     isLocked: false,
+    personal: false,
     isFavorite: false,
     archivedAt: null,
     position: 0,

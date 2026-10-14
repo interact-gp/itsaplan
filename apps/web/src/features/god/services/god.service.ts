@@ -17,6 +17,7 @@ import {
   type InstanceGoogleSettingsPatch,
   type InstanceOidcSettingsPatch,
   type InstanceTelegramSettingsPatch,
+  type SlackReminderSettingsInput,
   type InstanceUserKind,
   getInstanceAuthSettings,
   updateInstanceAuthSettings,
@@ -29,6 +30,9 @@ import {
   updateInstanceOidcSettings,
   getInstanceTelegramSettings,
   updateInstanceTelegramSettings,
+  getSlackReminderSettings,
+  sendSlackReminderTest,
+  updateSlackReminderSettings,
   getInstanceProjectDefaults,
   updateInstanceProjectDefaults,
   getInstanceStorageSettings,
@@ -202,6 +206,27 @@ export function useUpdateInstanceTelegramSettings() {
     mutationFn: (patch: InstanceTelegramSettingsPatch) => updateInstanceTelegramSettings(patch),
     onSuccess: (data) => qc.setQueryData(qk.instanceTelegramSettings, data),
   });
+}
+
+// The schedule of the Slack digest of pending work, and a test that sends the digest
+// to the administrator who asks.
+export function useSlackReminderSettingsQuery() {
+  return useQuery({
+    queryKey: qk.slackReminderSettings,
+    queryFn: () => getSlackReminderSettings(),
+  });
+}
+
+export function useUpdateSlackReminderSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SlackReminderSettingsInput) => updateSlackReminderSettings(input),
+    onSuccess: (data) => qc.setQueryData(qk.slackReminderSettings, data),
+  });
+}
+
+export function useSendSlackReminderTest() {
+  return useMutation({ mutationFn: () => sendSlackReminderTest() });
 }
 
 // What a new project starts with on this instance. Projects that already exist are

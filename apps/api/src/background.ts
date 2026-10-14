@@ -4,6 +4,8 @@ import { processAgentRuns } from '#modules/agents/core/run-poller';
 import { sweepStaleIssues } from '#modules/issues/auto-archive';
 import { syncKeycloakAccess } from '#modules/organization/keycloak';
 import { retrySlackWork } from '#modules/slack/handler';
+import { provisionPersonalPages } from '#modules/personal-pages/service';
+import { runReminders } from '#modules/slack-reminders/service';
 import { managedAccess } from '@repo/db';
 
 // The api's background jobs, started by index.ts rather than assembled into the app,
@@ -19,6 +21,12 @@ export function startBackgroundJobs(): void {
   // Works again on Slack requests that failed or were interrupted, and sends the replies
   // still owed for tasks the bot created.
   startLoop('slack-bot', retrySlackWork, () => 30_000);
+  // Gives each member who may use the app their "My To-do" page, including people
+  // who have not signed in yet, and retries anything a previous run left undone.
+  startLoop('personal-pages', provisionPersonalPages, () => 30_000);
+  // Queues the Slack digest when its schedule comes due (it is off until one is set)
+  // and sends queued digests, including retries.
+  startLoop('slack-reminders', runReminders, () => 60_000);
   startLoop('agent-runs', processAgentRuns, agentRunConfig.pollIntervalMs);
   // Archiving is not time-sensitive, so the sweep runs far less often than the queue
   // is drained.

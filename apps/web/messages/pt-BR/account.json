@@ -146,6 +146,8 @@
     },
     "autoWatch": "Acompanhar issues automaticamente",
     "autoWatchDescription": "As que você cria, é atribuído, comenta ou é mencionado.",
+    "slackReminders": "Lembretes do Slack",
+    "slackRemindersDescription": "Uma mensagem privada no Slack com os itens não marcados de Minhas tarefas e o trabalho aberto atribuído a você, enviada quando o agendamento de lembretes é executado.",
     "showChatByDefault": "Mostrar o chat por padrão",
     "showChatByDefaultDescription": "O painel de chat abre com uma página de projeto. Feche-o a qualquer momento pelo cabeçalho ou pelo ícone de chat."
   }

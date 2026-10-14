@@ -43,6 +43,10 @@
       "label": "Telegram",
       "description": "Le bot auquel les utilisateurs relient leur compte Telegram, et celui qui envoie les notifications Telegram des projets sans bot dédié."
     },
+    "slack-reminders": {
+      "label": "Rappels Slack",
+      "description": "Le planning du message Slack privé qui liste le travail en attente de chaque personne."
+    },
     "email": {
       "label": "Fournisseur d'e-mail",
       "description": "Le fournisseur de messagerie utilisé par l'instance : réinitialisations de mot de passe, confirmations d'adresse et liens de connexion."

@@ -14,6 +14,7 @@ function document(id: number, parentId: number | null, title: string): ProjectDo
     fullWidth: false,
     isPrivate: false,
     isLocked: false,
+    personal: false,
     isFavorite: false,
     archivedAt: null,
     position: id,

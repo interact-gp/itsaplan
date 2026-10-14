@@ -146,6 +146,8 @@
     },
     "autoWatch": "Suivre les tickets automatiquement",
     "autoWatchDescription": "Ceux que vous créez, qui vous sont assignés, que vous commentez ou dans lesquels vous êtes mentionné.",
+    "slackReminders": "Rappels Slack",
+    "slackRemindersDescription": "Un message Slack privé avec les éléments non cochés de Mes tâches et le travail ouvert qui vous est assigné, envoyé quand le planning des rappels s’exécute.",
     "showChatByDefault": "Afficher le chat par défaut",
     "showChatByDefaultDescription": "Le panneau de chat s'ouvre avec une page de projet. Fermez-le à tout moment depuis son en-tête ou l'icône de chat."
   }

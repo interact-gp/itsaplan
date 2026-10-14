@@ -19,6 +19,7 @@ import {
 } from '@repo/db';
 import { and, eq, getTableColumns } from 'drizzle-orm';
 import { HttpError, iso } from '#shared/lib';
+import { personalWorkspace } from '#modules/personal-pages/workspace';
 import {
   defaultMemberPermissions,
   fullPermissions,
@@ -547,6 +548,12 @@ export async function setSubtaskAutomationSettings(
 // conversation threads of the project's agents are deleted first, since they live
 // outside those cascades.
 export async function deleteProject(projectId: number): Promise<void> {
+  // Deleting it would take every member's personal page with it.
+  if ((await personalWorkspace()).projectId === projectId)
+    throw new HttpError(
+      409,
+      "The Personal Notes project holds everyone's personal pages and cannot be deleted.",
+    );
   await deleteThreadsWhere({ projectId });
   // A team membership the SCIM reconciliation granted stands on the project
   // memberships it granted with it, and no group change follows the delete to re-check

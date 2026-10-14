@@ -220,6 +220,21 @@
     "botTokenHint": "The token is verified with Telegram when you save, so a wrong one is refused here rather than failing silently later.",
     "resolvedHint": "Resolved from the token. This is the bot people will see when connecting."
   },
+  "slackReminders": {
+    "saved": "Reminder schedule saved",
+    "schedule": "Schedule",
+    "scheduleHint": "Each person gets a private Slack message with their unticked My To-do items and their open assigned work. People can turn it off in their preferences.",
+    "slackMissing": "The Slack bot is not set up on this server. Set SLACK_BOT_TOKEN and SLACK_TEAM_ID first.",
+    "cron": "Cron schedule",
+    "cronHint": "Five fields: minute, hour, day of month, month, day of week. At most once an hour.",
+    "timezone": "Timezone",
+    "nextRun": "Next run: {when}",
+    "off": "Reminders are off. Nothing is sent on a schedule.",
+    "privacy": "Each message goes only to that person's own Slack DM. Slack keeps it under the workspace's retention policy.",
+    "sendTest": "Send a test to me",
+    "testSent": "Test sent to your Slack DM",
+    "testNotSent": "Nothing was sent: {outcome}"
+  },
   "email": {
     "saved": "Email provider saved",
     "provider": "Email provider",

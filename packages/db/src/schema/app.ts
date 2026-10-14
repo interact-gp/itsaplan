@@ -188,6 +188,8 @@ export const userPreference = pgTable(
     issueStatsView: text('issue_stats_view').notNull().default('compact'),
     issueActivityView: text('issue_activity_view').notNull().default('flat'),
     autoWatch: boolean('auto_watch').notNull().default(true),
+    // Whether the scheduled Slack digest of pending work is sent to this user.
+    slackReminders: boolean('slack_reminders').notNull().default(true),
     // The user's own keyboard shortcut overrides, as { hotkeyId: combo }. Only the
     // bindings they changed are stored; the rest come from the instance defaults
     // (app_setting key 'hotkeys') and then the built-in ones.
@@ -993,6 +995,43 @@ export const slackBotMessage = pgTable(
     ),
     check(
       'slack_bot_message_status_check',
+      sql`${t.status} IN ('pending', 'sent', 'skipped', 'failed')`,
+    ),
+  ],
+);
+
+// One private Slack digest of pending work for one user and one scheduled time. The
+// unique (user_id, scheduled_for) pair is what makes a second scheduler pass, another
+// api replica or a retry produce no second message. Rows are claimed the way
+// notification deliveries are: next_attempt_at is pushed forward as a lease, so a row
+// a crashed process held is picked up again. The digest itself is built at send time,
+// after access is checked again, and is never stored.
+export const slackReminderDelivery = pgTable(
+  'slack_reminder_delivery',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    scheduledFor: timestamp('scheduled_for', { withTimezone: true }).notNull(),
+    trigger: text('trigger').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    // Why the row ended as it did: a skip reason or the last Slack error code. Never
+    // the digest content.
+    outcome: text('outcome'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('slack_reminder_delivery_occurrence_uq').on(t.userId, t.scheduledFor),
+    index('slack_reminder_delivery_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'pending'`),
+    check('slack_reminder_delivery_trigger_check', sql`${t.trigger} IN ('schedule', 'manual')`),
+    check(
+      'slack_reminder_delivery_status_check',
       sql`${t.status} IN ('pending', 'sent', 'skipped', 'failed')`,
     ),
   ],
@@ -1970,6 +2009,10 @@ export const projectDocument = pgTable(
     fullWidth: boolean('full_width').notNull().default(false),
     isPrivate: boolean('is_private').notNull().default(false),
     isLocked: boolean('is_locked').notNull().default(false),
+    // A member's own "My To-do" page. Only its owner can reach it: organization
+    // admins and project owners get no override, and it cannot be made public,
+    // handed over, copied, archived or nested.
+    personal: boolean('personal').notNull().default(false),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     archivedByAncestorId: integer('archived_by_ancestor_id').references(
       (): AnyPgColumn => projectDocument.id,
@@ -1993,7 +2036,11 @@ export const projectDocument = pgTable(
     index('project_document_project_tree_idx').on(t.projectId, t.parentId, t.position, t.id),
     index('project_document_owner_idx').on(t.ownerUserId),
     index('project_document_project_archive_idx').on(t.projectId, t.archivedAt),
+    uniqueIndex('project_document_personal_owner_uq')
+      .on(t.ownerUserId)
+      .where(sql`${t.personal}`),
     check('project_document_version_check', sql`${t.version} > 0`),
+    check('project_document_personal_private_check', sql`NOT ${t.personal} OR ${t.isPrivate}`),
   ],
 );
 

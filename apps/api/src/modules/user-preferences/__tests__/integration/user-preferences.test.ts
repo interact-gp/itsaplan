@@ -27,6 +27,7 @@ describe('user preferences', () => {
       issueStatsView: 'compact',
       issueActivityView: 'flat',
       autoWatch: true,
+      slackReminders: true,
       lastProjectId: null,
       hotkeys: {},
     });
@@ -86,6 +87,7 @@ describe('user preferences', () => {
       issueStatsView: 'timeline',
       issueActivityView: 'grouped',
       autoWatch: false,
+      slackReminders: true,
       lastProjectId: null,
       hotkeys: { 'issue.new': 'i' },
     });

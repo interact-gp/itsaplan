@@ -1,4 +1,5 @@
 import {
+  BellRing,
   Building2,
   FolderKanban,
   HardDrive,
@@ -70,6 +71,12 @@ export const GOD_SECTIONS: GodSection[] = [
     slug: 'telegram',
     group: 'instance',
     icon: Send,
+    integration: true,
+  },
+  {
+    slug: 'slack-reminders',
+    group: 'instance',
+    icon: BellRing,
     integration: true,
   },
   {
