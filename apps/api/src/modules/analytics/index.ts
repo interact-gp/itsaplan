@@ -57,6 +57,8 @@ export const analyticsRoutes = new Elysia({
       return getStats(project.id);
     },
     {
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: StatsDto, ...accessErrors },
       detail: {
@@ -74,6 +76,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: breakdownQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: BreakdownListResponse, ...commonErrors },
       detail: {
@@ -94,6 +98,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: pulseQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: PulseListResponse, ...commonErrors },
       detail: {
@@ -112,6 +118,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: throughputQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: ThroughputListResponse, ...commonErrors },
       detail: {
@@ -151,6 +159,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: activityQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: ActivityPage, ...commonErrors },
       detail: {
@@ -169,6 +179,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: agentRunFeedQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: AgentRunFeedListResponse, ...commonErrors },
       detail: {
@@ -187,6 +199,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: daysQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: AgentRunStatsDto, ...commonErrors },
       detail: {
@@ -205,6 +219,8 @@ export const analyticsRoutes = new Elysia({
     },
     {
       query: daysQuery,
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: WebhookStatsDto, ...commonErrors },
       detail: {
@@ -221,6 +237,8 @@ export const analyticsRoutes = new Elysia({
       return getAgentWorkload(project.id);
     },
     {
+      projectWide: true,
+
       permission: ['dashboards', 'read'],
       response: { 200: AgentWorkloadListResponse, ...accessErrors },
       detail: {

@@ -211,6 +211,15 @@
     "quotaMb": "Armazenamento por projeto (MB)",
     "quotaNote": "Quando um projeto atinge a cota, novos envios são recusados até alguém excluir anexos."
   },
+  "frndRequests": {
+    "enrolment": "Inscrever todos os membros",
+    "enrolmentHint": "Adiciona todos que podem usar o aplicativo ao projeto General Requests, agora e quando entrarem. Ative depois de verificar a privacidade das solicitações.",
+    "on": "Ativado: todos os membros estão em General Requests.",
+    "off": "Desativado: ninguém é inscrito automaticamente.",
+    "privacy": "Cada solicitação só é vista por quem pediu, pela pessoa atribuída e pelas pessoas adicionadas, inclusive para administradores.",
+    "enabled": "Solicitações FRND ativadas",
+    "disabled": "Solicitações FRND desativadas"
+  },
   "telegram": {
     "saved": "Configurações do Telegram salvas",
     "bot": "Bot",

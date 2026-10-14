@@ -122,6 +122,10 @@ export const project = pgTable('project', {
   subtasksEnabled: boolean('subtasks_enabled').notNull().default(true),
   checklistsEnabled: boolean('checklists_enabled').notNull().default(true),
   issueStatsEnabled: boolean('issue_stats_enabled').notNull().default(true),
+  // Each issue is visible only to the member who created it, its current assignee
+  // and the participants added to it. Project membership, project ownership and
+  // organization administration do not reveal it. Set only by provisioning.
+  participantOnly: boolean('participant_only').notNull().default(false),
   // Which kinds of estimate the issues of this project carry, set in Settings ->
   // Configuration. Both off by default; turning one off hides its UI and keeps the
   // values, which show again when it is turned back on.
@@ -1037,6 +1041,47 @@ export const slackReminderDelivery = pgTable(
   ],
 );
 
+// One private Slack message about a request (an issue of a participant-only project)
+// to one person: they were assigned or added, mentioned, the request was commented on
+// or moved, or they were removed from it. dedupe_key names the event the message is
+// for, so a retried write or a second api replica queues it once. The text is built
+// at send time, after the person's access is checked again, and is never stored.
+export const slackRequestMessage = pgTable(
+  'slack_request_message',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    issueId: integer('issue_id')
+      .notNull()
+      .references(() => issue.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    actorName: text('actor_name'),
+    dedupeKey: text('dedupe_key').notNull().unique(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    // A skip reason or the last Slack error code. Never the message.
+    outcome: text('outcome'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('slack_request_message_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'pending'`),
+    check(
+      'slack_request_message_kind_check',
+      sql`${t.kind} IN ('assigned', 'added', 'removed', 'mentioned', 'commented', 'state_changed')`,
+    ),
+    check(
+      'slack_request_message_status_check',
+      sql`${t.status} IN ('pending', 'sent', 'skipped', 'failed')`,
+    ),
+  ],
+);
+
 // Outbox for outbound notification delivery. One row per (recipient, channel,
 // message) to send for an issue event: an email or a Telegram message to one member.
 // Rows are enqueued when inbox notifications are created (see
@@ -1438,6 +1483,11 @@ export const issue = pgTable(
     delegateUserId: text('delegate_user_id').references(() => user.id, {
       onDelete: 'set null',
     }),
+    // Who created the issue. In a participant-only project this person always keeps
+    // access to it.
+    createdByUserId: text('created_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     priority: text('priority'),
@@ -1608,6 +1658,26 @@ export const issueLink = pgTable(
 // them whether they watch it or not. `subscribed` false is an unsubscription: the
 // row stays so the auto-subscribe rules (see watchers.ts) cannot put the member
 // back on the next comment they write.
+// Members explicitly given access to an issue in a participant-only project, in
+// addition to its creator and its current assignee.
+export const issueParticipant = pgTable(
+  'issue_participant',
+  {
+    issueId: integer('issue_id')
+      .notNull()
+      .references(() => issue.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    addedByUserId: text('added_by_user_id').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.issueId, t.userId] }),
+    index('issue_participant_user_idx').on(t.userId),
+  ],
+);
+
 export const issueWatcher = pgTable(
   'issue_watcher',
   {

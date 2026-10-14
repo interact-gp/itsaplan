@@ -1,4 +1,6 @@
 import {
+  UserMinus,
+  UserPlus,
   Archive,
   ArchiveRestore,
   Calendar,
@@ -33,6 +35,8 @@ export const ACTION_ICON: Record<ActivityAction, LucideIcon> = {
   status: CircleDot,
   assignee: UserRound,
   delegate: Bot,
+  participant_added: UserPlus,
+  participant_removed: UserMinus,
   priority: SignalHigh,
   estimate: Gauge,
   type: Shapes,

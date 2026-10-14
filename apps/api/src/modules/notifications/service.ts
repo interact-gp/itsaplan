@@ -15,6 +15,8 @@ import { addedMentionHandles, resolveMentionHandles, type MentionedUsers } from 
 import { autoWatchIssue, watcherUserIds } from '#modules/issues/watchers';
 import { iso } from '#shared/lib';
 import { enqueueOutbound } from './outbound';
+import { isIssueVisible, issueVisibleTo } from '#shared/issue-visibility';
+import { queueRequestMessages } from '#modules/frnd-requests/messages';
 
 // Inbox notifications. A notification is one (recipient, event) row: a user is told
 // about an issue they are involved in. What happens on the issue ('commented',
@@ -53,10 +55,36 @@ async function actorName(id: string | null): Promise<string | null> {
   return rows[0]?.name ?? null;
 }
 
-async function insertNotifications(rows: NewNotificationRow[]): Promise<void> {
+// Only people who may see the issue are notified about it: in a participant-only
+// project a mention or a watch row does not reach anyone outside the issue.
+async function insertNotifications(all: NewNotificationRow[]): Promise<void> {
+  const visible = await Promise.all(all.map((r) => isIssueVisible(r.issueId, r.userId)));
+  const rows = all.filter((_, i) => visible[i]);
   if (rows.length === 0) return;
   const name = await actorName(rows[0].actorUserId);
-  await db.insert(notification).values(rows.map((r) => ({ ...r, actorName: name })));
+  const inserted = await db
+    .insert(notification)
+    .values(rows.map((r) => ({ ...r, actorName: name })))
+    .returning({
+      id: notification.id,
+      userId: notification.userId,
+      issueId: notification.issueId,
+      type: notification.type,
+    });
+  // People in a request also hear about it in their Slack DM.
+  try {
+    await queueRequestMessages(
+      inserted.map((n) => ({
+        userId: n.userId,
+        issueId: n.issueId,
+        kind: n.type as NotificationType,
+        actorName: name,
+        dedupeKey: `notification:${n.id}`,
+      })),
+    );
+  } catch (err) {
+    console.error('[notifications] request message queue failed:', err);
+  }
   // Fan out to the project's enabled delivery channels (email, Telegram). Best-effort:
   // a delivery failure must not break the inbox insert or the domain mutation.
   try {
@@ -357,6 +385,7 @@ export async function listNotifications(
       and(
         ...conds,
         (await isOrganizationAdmin(userId)) ? undefined : eq(projectMember.userId, userId),
+        issueVisibleTo(userId),
       ),
     )
     .orderBy(desc(notification.createdAt), desc(notification.id))
@@ -383,6 +412,7 @@ export async function unreadCount(userId: string, projectId?: number): Promise<n
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(notification)
+    .innerJoin(issue, eq(issue.id, notification.issueId))
     .leftJoin(
       projectMember,
       and(eq(projectMember.projectId, notification.projectId), eq(projectMember.userId, userId)),
@@ -391,6 +421,7 @@ export async function unreadCount(userId: string, projectId?: number): Promise<n
       and(
         ...conds,
         (await isOrganizationAdmin(userId)) ? undefined : eq(projectMember.userId, userId),
+        issueVisibleTo(userId),
       ),
     );
   return row?.n ?? 0;

@@ -1,17 +1,22 @@
 import { Elysia, t } from 'elysia';
 import { noContent } from '#shared/http';
+import {
+  isIssueVisible,
+  isParticipantOnlyProject,
+  visibleIssueProjectId,
+} from '#shared/issue-visibility';
 import { authContext } from '#shared/auth-context';
 import { entityGuard } from '#shared/guards';
 import { HttpError } from '#shared/lib';
 import { pinnedFetch } from '#shared/net';
 import { mcpTool } from '#mcp/generate';
 import { accessErrors, commonErrors, errors } from '#shared/responses';
-import { getIssueProjectId } from '#modules/issues/service';
 import { getStorageSettings, MB } from '#modules/settings/service';
 import {
   AttachmentResponse,
   AttachmentListResponse,
   importAttachmentBody,
+  issueAttachmentParams,
   issueParams,
   publicIdParams,
   rawAttachmentQuery,
@@ -37,15 +42,19 @@ import {
 
 // Public shape returned to the UI: never exposes the internal serial id or the
 // object key. `url` is the public, no-auth download route — it can be embedded in
-// an issue description and fetched by external services.
-function attachmentDto(a: AttachmentRow) {
+// an issue description and fetched by external services. A file of a private request
+// has no public route: its url is the signed-in one, which only the people in the
+// request can open, so a link someone kept stops working once they are removed.
+function attachmentDto(a: AttachmentRow, privateIssue: boolean) {
   return {
     id: a.publicId,
     filename: a.filename,
     contentType: a.contentType,
     sizeBytes: a.sizeBytes,
     createdAt: a.createdAt,
-    url: `/attachments/${a.publicId}/raw`,
+    url: privateIssue
+      ? `/issues/${a.issueId}/attachments/${a.publicId}/raw`
+      : `/attachments/${a.publicId}/raw`,
   };
 }
 
@@ -58,20 +67,21 @@ export const attachmentRoutes = new Elysia({
   // `issueAttachment` for /issues/:issueId/attachments, `attachment` for
   // /attachments/:publicId. Both assert a work_items action on the owning project.
   .macro({
-    issueAttachment: entityGuard('work_items', 'Issue not found', (p) =>
-      getIssueProjectId(Number(p.issueId)),
+    issueAttachment: entityGuard('work_items', 'Issue not found', (p, userId) =>
+      visibleIssueProjectId(Number(p.issueId), userId),
     ),
-    attachment: entityGuard('work_items', 'Attachment not found', async (p) => {
+    attachment: entityGuard('work_items', 'Attachment not found', async (p, userId) => {
       const existing = await getAttachmentByPublicId(p.publicId);
       if (!existing) return null;
-      return getIssueProjectId(existing.issueId);
+      return visibleIssueProjectId(existing.issueId, userId);
     }),
   })
   .get(
     '/issues/:issueId/attachments',
-    async ({ params }) => {
+    async ({ params, projectId }) => {
       const rows = await listAttachments(params.issueId);
-      return rows.map(attachmentDto);
+      const privateIssue = await isParticipantOnlyProject(projectId);
+      return rows.map((row) => attachmentDto(row, privateIssue));
     },
     {
       params: issueParams,
@@ -117,7 +127,7 @@ export const attachmentRoutes = new Elysia({
         throw error;
       }
       set.status = 201;
-      return attachmentDto(row);
+      return attachmentDto(row, await isParticipantOnlyProject(projectId));
     },
     {
       body: uploadAttachmentBody,
@@ -194,7 +204,7 @@ export const attachmentRoutes = new Elysia({
         throw error;
       }
       set.status = 201;
-      return attachmentDto(row);
+      return attachmentDto(row, await isParticipantOnlyProject(projectId));
     },
     {
       params: issueParams,
@@ -247,7 +257,7 @@ export const attachmentRoutes = new Elysia({
       // The row already points at the new object, so a failed delete only
       // orphans the old bytes.
       await deleteAttachmentObject(replacement.replacedS3Key);
-      return attachmentDto(replacement.attachment);
+      return attachmentDto(replacement.attachment, await isParticipantOnlyProject(projectId));
     },
     {
       body: uploadAttachmentBody,
@@ -281,6 +291,31 @@ export const attachmentRoutes = new Elysia({
     },
   )
 
+  // The download/preview URL of a private request's file, for a signed-in viewer who is
+  // in the request. Reached through the web app's /protected-media route, which
+  // forwards the session.
+  .get(
+    '/issues/:issueId/attachments/:publicId/raw',
+    async ({ params, query, request }) => {
+      const row = await getAttachmentByPublicId(params.publicId);
+      if (!row || row.issueId !== params.issueId) throw new HttpError(404, 'Attachment not found');
+      return attachmentObjectResponse({
+        s3Key: row.s3Key,
+        contentType: row.contentType,
+        filename: row.filename,
+        request,
+        download: query.download != null,
+      });
+    },
+    {
+      params: issueAttachmentParams,
+      query: rawAttachmentQuery,
+      issueAttachment: 'read',
+      response: { ...commonErrors },
+      detail: { summary: "Download or preview a private request's attachment" },
+    },
+  )
+
   // Public download/preview URL: unauthenticated so it works in <img>/<video>
   // tags and can be fetched by external services. The publicId is an unguessable
   // uuid. `?download=1` forces a download instead of inline rendering.
@@ -288,7 +323,8 @@ export const attachmentRoutes = new Elysia({
     '/attachments/:publicId/raw',
     async ({ params, query, request }) => {
       const row = await getAttachmentByPublicId(params.publicId);
-      if (!row) throw new HttpError(404, 'Attachment not found');
+      if (!row || !(await isIssueVisible(row.issueId, null)))
+        throw new HttpError(404, 'Attachment not found');
       return attachmentObjectResponse({
         s3Key: row.s3Key,
         contentType: row.contentType,

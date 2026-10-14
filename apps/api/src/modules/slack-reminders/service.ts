@@ -172,7 +172,7 @@ export function untickedItems(
 // The member's Slack user in the bot's workspace. A link made by the bot is reused;
 // otherwise the verified address is looked up in Slack. Either way the Slack profile
 // must still carry the member's address, so a reassigned Slack account gets nothing.
-async function slackUserFor(member: { id: string; email: string; emailVerified: boolean }) {
+export async function slackUserFor(member: { id: string; email: string; emailVerified: boolean }) {
   const workspace = process.env.SLACK_TEAM_ID!;
   const [linked] = await db
     .select({ slackUserId: userSlackAccount.slackUserId })

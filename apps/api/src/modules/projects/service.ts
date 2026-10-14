@@ -20,6 +20,7 @@ import {
 import { and, eq, getTableColumns } from 'drizzle-orm';
 import { HttpError, iso } from '#shared/lib';
 import { personalWorkspace } from '#modules/personal-pages/workspace';
+import { requestDesk } from '#modules/frnd-requests/desk';
 import {
   defaultMemberPermissions,
   fullPermissions,
@@ -50,6 +51,8 @@ export interface ProjectRow {
   // The team's own MCP switch, carried here because every MCP gate is a project
   // gate: a project is reachable only while both flags are on.
   teamMcpEnabled: boolean;
+  // Each issue is visible only to its creator, assignee and participants.
+  participantOnly: boolean;
   initiativesEnabled: boolean;
   dashboardsEnabled: boolean;
   documentsEnabled: boolean;
@@ -102,8 +105,22 @@ const projectWithTeam = {
 // A blocked section reads as off whatever the project has stored, so masking here is
 // what turns a feature off everywhere: the web app reads the flags off this DTO, and
 // the route guards read them off the project the guard resolved.
+// The sections a participant-only project cannot have: each shows project-wide data
+// (counts, feeds, linked issues) that would reveal requests to people outside them.
+export const PARTICIPANT_ONLY_BLOCKED: ProjectFeature[] = [
+  'dashboards',
+  'initiatives',
+  'cycles',
+  'documents',
+  'notes',
+  'subtasks',
+];
+
 export async function mapProject(row: ProjectWithTeam): Promise<ProjectRow> {
-  const { blockedFeatures } = await getLimits({ teamId: row.teamId });
+  const limits = await getLimits({ teamId: row.teamId });
+  const blockedFeatures = row.participantOnly
+    ? [...limits.blockedFeatures, ...PARTICIPANT_ONLY_BLOCKED]
+    : limits.blockedFeatures;
   const on = (feature: ProjectFeature, stored: boolean) =>
     stored && !blockedFeatures.includes(feature);
   return {
@@ -115,6 +132,7 @@ export async function mapProject(row: ProjectWithTeam): Promise<ProjectRow> {
     description: row.description,
     mcpEnabled: row.mcpEnabled,
     teamMcpEnabled: row.teamMcpEnabled,
+    participantOnly: row.participantOnly,
     initiativesEnabled: on('initiatives', row.initiativesEnabled),
     dashboardsEnabled: on('dashboards', row.dashboardsEnabled),
     documentsEnabled: on('documents', row.documentsEnabled),
@@ -548,11 +566,17 @@ export async function setSubtaskAutomationSettings(
 // conversation threads of the project's agents are deleted first, since they live
 // outside those cascades.
 export async function deleteProject(projectId: number): Promise<void> {
-  // Deleting it would take every member's personal page with it.
+  // Deleting either shared project would take every member's personal page, or every
+  // request, with it.
   if ((await personalWorkspace()).projectId === projectId)
     throw new HttpError(
       409,
       "The Personal Notes project holds everyone's personal pages and cannot be deleted.",
+    );
+  if ((await requestDesk()).projectId === projectId)
+    throw new HttpError(
+      409,
+      'The General Requests project holds every request and cannot be deleted.',
     );
   await deleteThreadsWhere({ projectId });
   // A team membership the SCIM reconciliation granted stands on the project

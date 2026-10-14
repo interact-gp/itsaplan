@@ -44,6 +44,7 @@ import { notificationPreferenceRoutes } from './modules/notification-preferences
 import { userPreferenceRoutes } from './modules/user-preferences';
 import { personalPageRoutes } from './modules/personal-pages';
 import { slackReminderRoutes } from './modules/slack-reminders';
+import { requestDeskRoutes } from './modules/frnd-requests';
 import { telegramRoutes } from './modules/telegram';
 import { syncRoutes } from './modules/sync';
 import { linkPreviewRoutes } from './modules/link-previews';
@@ -132,4 +133,5 @@ export const planner = new Elysia({ name: 'planner' })
   .use(settingsRoutes)
   .use(godRoutes)
   .use(slackReminderRoutes)
+  .use(requestDeskRoutes)
   .use(organizationRoutes);

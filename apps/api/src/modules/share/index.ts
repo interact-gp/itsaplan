@@ -1,10 +1,10 @@
 import { Elysia, t } from 'elysia';
 import { noContent } from '#shared/http';
+import { visibleIssueProjectId } from '#shared/issue-visibility';
 import { guards, entityGuard } from '#shared/guards';
 import { authContext } from '#shared/auth-context';
 import { HttpError } from '#shared/lib';
 import { commonErrors, errors } from '#shared/responses';
-import { getIssueProjectId } from '#modules/issues/service';
 import { getView } from '#modules/views/service';
 import {
   BundleResponse,
@@ -31,8 +31,8 @@ export const shareRoutes = new Elysia({ name: 'share', detail: { tags: ['Share']
   // Guards for the enable/revoke routes, which address an issue or a view by its
   // own id. Sharing an issue is a work_items edit; sharing a view is a views edit.
   .macro({
-    workItem: entityGuard('work_items', 'Issue not found', (p) =>
-      getIssueProjectId(Number(p.issueId)),
+    workItem: entityGuard('work_items', 'Issue not found', (p, userId) =>
+      visibleIssueProjectId(Number(p.issueId), userId),
     ),
     savedView: entityGuard(
       'views',

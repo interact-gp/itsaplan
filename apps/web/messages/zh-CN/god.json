@@ -211,6 +211,15 @@
     "quotaMb": "每个项目的存储空间（MB）",
     "quotaNote": "项目达到配额后会拒绝新上传，直到有人删除附件。"
   },
+  "frndRequests": {
+    "enrolment": "添加所有成员",
+    "enrolmentHint": "将所有可以使用此应用的人添加到 General Requests 项目，包括之后加入的人。请在确认请求隐私后再开启。",
+    "on": "已开启：所有成员都在 General Requests 中。",
+    "off": "已关闭：不会自动添加任何人。",
+    "privacy": "每个请求仅对请求人、负责人和被添加的人可见，管理员也不例外。",
+    "enabled": "已开启 FRND 请求",
+    "disabled": "已关闭 FRND 请求"
+  },
   "telegram": {
     "saved": "Telegram 设置已保存",
     "bot": "机器人",

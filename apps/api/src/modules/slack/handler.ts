@@ -276,7 +276,8 @@ async function createIssue(
   await queueBotMessages([
     {
       eventId: mention.eventId,
-      kind: named ? 'thread_reply' : 'private_reply',
+      // A private request is told only to its sender, whatever the message named.
+      kind: named && !project.participantOnly ? 'thread_reply' : 'private_reply',
       issueId,
       slackUserId: mention.slackUserId,
     },

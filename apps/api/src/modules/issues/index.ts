@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { mcpTool } from '#mcp/generate';
 import { noContent } from '#shared/http';
+import { isIssueVisible, visibleIssueProjectId } from '#shared/issue-visibility';
 import { guards, entityGuard, assertMcpAllowed, requiresPermission } from '#shared/guards';
 import { authContext } from '#shared/auth-context';
 import { assertPermission, assertProjectOwner, requireUser } from '#shared/access';
@@ -15,7 +16,6 @@ import {
   listArchivedIssues,
   getIssue,
   getIssueBySequence,
-  getIssueProjectId,
   updateIssue,
   deleteIssue,
   archiveIssue,
@@ -60,6 +60,7 @@ import {
   updateWorklog,
 } from './worklogs';
 import { listIssueCycles } from './cycle-history';
+import { addIssueParticipant, listIssueParticipants, removeIssueParticipant } from './participants';
 import {
   createAndLinkPullRequest,
   linkExistingPullRequest,
@@ -95,6 +96,7 @@ import {
   DevelopmentBranchPageResponse,
   IssueResponse,
   IssueLinkResponse,
+  IssueParticipantResponse,
   IssueWatcherResponse,
   issueWatcherParams,
   ChecklistItemResponse,
@@ -188,41 +190,41 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   // entry and a comment belong to the issue that carries them, so they all resolve
   // to the same work_items permission.
   .macro({
-    workItem: entityGuard('work_items', 'Issue not found', (p) =>
-      getIssueProjectId(Number(p.issueId)),
+    workItem: entityGuard('work_items', 'Issue not found', (p, userId) =>
+      visibleIssueProjectId(Number(p.issueId), userId),
     ),
     // The checklist and stats routes carry the section they belong to, so turning it
     // off in the project's settings closes them.
     issueChecklist: entityGuard(
       'work_items',
       'Issue not found',
-      (p) => getIssueProjectId(Number(p.issueId)),
+      (p, userId) => visibleIssueProjectId(Number(p.issueId), userId),
       'checklists',
     ),
     issueStats: entityGuard(
       'work_items',
       'Issue not found',
-      (p) => getIssueProjectId(Number(p.issueId)),
+      (p, userId) => visibleIssueProjectId(Number(p.issueId), userId),
       'issueStats',
     ),
-    developmentIntegration: entityGuard('integrations', 'Issue not found', (p) =>
-      getIssueProjectId(Number(p.issueId)),
+    developmentIntegration: entityGuard('integrations', 'Issue not found', (p, userId) =>
+      visibleIssueProjectId(Number(p.issueId), userId),
     ),
     checklist: entityGuard(
       'work_items',
       'Checklist not found',
-      async (p) => {
+      async (p, userId) => {
         const issueId = await getChecklistIssueId(Number(p.checklistId));
-        return issueId == null ? null : getIssueProjectId(issueId);
+        return issueId == null ? null : visibleIssueProjectId(issueId, userId);
       },
       'checklists',
     ),
     checklistItem: entityGuard(
       'work_items',
       'Checklist item not found',
-      async (p) => {
+      async (p, userId) => {
         const issueId = await getChecklistItemIssueId(Number(p.itemId));
-        return issueId == null ? null : getIssueProjectId(issueId);
+        return issueId == null ? null : visibleIssueProjectId(issueId, userId);
       },
       'checklists',
     ),
@@ -235,7 +237,8 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
       return {
         async resolve({ params, user, request }) {
           const entry = await getWorklogRef(Number((params as { worklogId: string }).worklogId));
-          if (!entry) throw new HttpError(404, 'Time entry not found');
+          if (!entry || !(await isIssueVisible(entry.issueId, user?.id ?? null)))
+            throw new HttpError(404, 'Time entry not found');
           await assertPermission(entry.projectId, user, 'work_items', 'edit');
           if (entry.userId !== requireUser(user).id)
             await assertProjectOwner(entry.projectId, user);
@@ -251,7 +254,8 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
       return {
         async resolve({ params, user, request }) {
           const entry = await getCommentRef(Number((params as { commentId: string }).commentId));
-          if (!entry) throw new HttpError(404, 'Comment not found');
+          if (!entry || !(await isIssueVisible(entry.issueId, user?.id ?? null)))
+            throw new HttpError(404, 'Comment not found');
           await assertPermission(entry.projectId, user, 'work_items', 'edit');
           if (entry.actorUserId !== requireUser(user).id)
             await assertProjectOwner(entry.projectId, user);
@@ -352,7 +356,11 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
         disposition(body),
         requireUser(user).id,
       );
-      const { deleted, attachments } = await bulkDeleteIssues(project.id, body.ids);
+      const { deleted, attachments } = await bulkDeleteIssues(
+        project.id,
+        body.ids,
+        requireUser(user).id,
+      );
       await purgeObjects([...fromSubtasks, ...attachments]);
       return { deleted };
     },
@@ -372,9 +380,13 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   // /issues/:sequenceNumber so the static "search" segment wins over the numeric param.
   .get(
     '/projects/:projectKey/issues/search',
-    async ({ project, query }) => {
+    async ({ project, query, user }) => {
       const limit = Math.min(Math.max(query.limit ?? 50, 1), 500);
-      return searchIssues(project, { query: query.q, limit }, { includeArchived: true });
+      return searchIssues(
+        project,
+        { query: query.q, limit },
+        { includeArchived: true, viewerId: requireUser(user).id },
+      );
     },
     {
       params: projectKeyParams,
@@ -395,7 +407,7 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   // 'true'.
   .get(
     '/projects/:projectKey/issues',
-    async ({ project, query }) => {
+    async ({ project, query, user }) => {
       const labelIds = query.labelIds
         ? query.labelIds.split(',').map(Number).filter(Number.isFinite)
         : undefined;
@@ -423,7 +435,7 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
           dueTo: str(query.dueTo),
           limit,
         },
-        { includeArchived: query.includeArchived === 'true' },
+        { includeArchived: query.includeArchived === 'true', viewerId: requireUser(user).id },
       );
     },
     {
@@ -446,9 +458,9 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   // search_issues, and read an issue's relations with the issue itself.
   .get(
     '/projects/:projectKey/issues/board',
-    async ({ project }) => ({
+    async ({ project, user }) => ({
       issues: await attachSubtaskCounts(
-        await attachBoardLinks(await listIssues(project), project.id),
+        await attachBoardLinks(await listIssues(project, requireUser(user).id), project.id),
         project.id,
       ),
     }),
@@ -464,7 +476,7 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   // and restore. Same read permission as the board.
   .get(
     '/projects/:projectKey/issues/archived',
-    async ({ project }) => listArchivedIssues(project),
+    async ({ project, user }) => listArchivedIssues(project, requireUser(user).id),
     {
       params: projectKeyParams,
       permission: ['work_items', 'read'],
@@ -478,9 +490,10 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   // identifier-based issue page. Same read permission as the by-id read.
   .get(
     '/projects/:projectKey/issues/:sequenceNumber',
-    async ({ project, params }) => {
+    async ({ project, params, user }) => {
       const issue = await getIssueBySequence(project.id, params.sequenceNumber);
-      if (!issue) throw new HttpError(404, 'Issue not found');
+      if (!issue || !(await isIssueVisible(issue.id, requireUser(user).id)))
+        throw new HttpError(404, 'Issue not found');
       const fields = await getIssueFieldValues(issue.id);
       const links = await listIssueLinks(issue.id);
       const watchers = await listIssueWatchers(project.id, issue.id);
@@ -510,7 +523,8 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
     '/issues/:issueId',
     async ({ params, user, request }) => {
       const issue = await getIssue(params.issueId);
-      if (!issue) throw new HttpError(404, 'Issue not found');
+      if (!issue || !(await isIssueVisible(issue.id, user?.id ?? null)))
+        throw new HttpError(404, 'Issue not found');
       await assertPermission(issue.projectId, user, 'work_items', 'read');
       // This route resolves the project itself, so it also enforces the per-project
       // MCP toggle itself (it does not run through the workItem guard).
@@ -1168,7 +1182,7 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   .put(
     '/issues/:issueId/watchers/:userId',
     async ({ params, projectId }) => {
-      if (!(await isEligibleIssueWatcher(projectId, params.userId))) {
+      if (!(await isEligibleIssueWatcher(projectId, params.issueId, params.userId))) {
         throw new HttpError(400, 'Watcher must be a human project member with work item access');
       }
       await setIssueWatching(params.issueId, params.userId, true);
@@ -1187,10 +1201,57 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
     },
   )
 
+  // The people added to a request, besides its creator and its assignee. Only a project
+  // that keeps issues to their participants has them; its creator or its current
+  // assignee adds and removes them, and removal ends that person's access at once.
+  .get('/issues/:issueId/participants', ({ params }) => listIssueParticipants(params.issueId), {
+    params: issueParams,
+    workItem: 'read',
+    response: { 200: t.Array(IssueParticipantResponse), ...commonErrors },
+    detail: {
+      summary: 'List request participants',
+      description: 'List the people added to a private request, besides its creator and assignee.',
+      ...mcpTool('list_issue_participants'),
+    },
+  })
+
+  .put(
+    '/issues/:issueId/participants/:userId',
+    ({ params, user }) => addIssueParticipant(params.issueId, requireUser(user).id, params.userId),
+    {
+      params: issueWatcherParams,
+      workItem: 'read',
+      response: { 200: t.Array(IssueParticipantResponse), ...commonErrors },
+      detail: {
+        summary: 'Add a request participant',
+        description:
+          'Give another enabled project member access to a private request. Only its requester or current assignee can do this.',
+        ...mcpTool('add_issue_participant'),
+      },
+    },
+  )
+
+  .delete(
+    '/issues/:issueId/participants/:userId',
+    ({ params, user }) =>
+      removeIssueParticipant(params.issueId, requireUser(user).id, params.userId),
+    {
+      params: issueWatcherParams,
+      workItem: 'read',
+      response: { 200: t.Array(IssueParticipantResponse), ...commonErrors },
+      detail: {
+        summary: 'Remove a request participant',
+        description:
+          "Take away a participant's access to a private request. Only its requester or current assignee can do this.",
+        ...mcpTool('remove_issue_participant'),
+      },
+    },
+  )
+
   .delete(
     '/issues/:issueId/watchers/:userId',
     async ({ params, projectId }) => {
-      if (!(await isEligibleIssueWatcher(projectId, params.userId))) {
+      if (!(await isEligibleIssueWatcher(projectId, params.issueId, params.userId))) {
         throw new HttpError(400, 'Watcher must be a human project member with work item access');
       }
       await setIssueWatching(params.issueId, params.userId, false);

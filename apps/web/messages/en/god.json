@@ -211,6 +211,15 @@
     "quotaMb": "Storage per project (MB)",
     "quotaNote": "Once a project reaches the quota, new uploads are refused until someone deletes attachments."
   },
+  "frndRequests": {
+    "enrolment": "Enrol every member",
+    "enrolmentHint": "Adds everyone who may use the app to the General Requests project, now and as people join. Turn it on once the request privacy has been checked.",
+    "on": "On: every member is in General Requests.",
+    "off": "Off: nobody is enrolled automatically.",
+    "privacy": "Each request is visible only to the requester, the assignee and the people added to it, including to administrators.",
+    "enabled": "FRND Requests turned on",
+    "disabled": "FRND Requests turned off"
+  },
   "telegram": {
     "saved": "Telegram settings saved",
     "bot": "Bot",

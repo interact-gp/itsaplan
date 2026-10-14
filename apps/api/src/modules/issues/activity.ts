@@ -24,6 +24,7 @@ import {
   notifyTextMentions,
 } from '#modules/notifications/service';
 import { listStatusTimeline } from './status-history';
+import { isParticipantOnlyProject } from '#shared/issue-visibility';
 
 // Issue timeline: comments and change-log activity in one table (issue_activity).
 // kind selects which columns a row uses. The author is the session user
@@ -401,6 +402,8 @@ async function enqueueMentionRuns(
   mentionedAgentUserIds: string[],
 ): Promise<void> {
   if (mentionedAgentUserIds.length === 0 && comment.replyToId == null) return;
+  // A request is between the people in it; an agent is not one of them.
+  if (await isParticipantOnlyProject(projectId)) return;
   // A comment an agent wrote starts no run of its own, which stops agent-to-agent
   // mention loops.
   if (comment.actorUserId && (await isAgentUser(comment.actorUserId))) return;

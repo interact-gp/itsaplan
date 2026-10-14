@@ -4,6 +4,7 @@ import { HttpError } from '#shared/lib';
 import { getMembership } from '#modules/members/service';
 import { recordActivityForIssues, statusSide } from '#modules/issues/activity';
 import { recordStatusChange } from '#modules/issues/status-history';
+import { isParticipantOnlyProject } from '#shared/issue-visibility';
 
 export interface ColumnRow {
   id: number;
@@ -219,6 +220,9 @@ export async function deleteColumn(
   if (!column || column.projectId !== projectId)
     throw new HttpError(404, `Column ${columnId} not found`);
   if (column.stateType === 'backlog') throw new HttpError(400, 'Backlog columns cannot be deleted');
+  // Deleting the issues would destroy requests the caller may not even see.
+  if (opts.mode !== 'move' && (await isParticipantOnlyProject(projectId)))
+    throw new HttpError(400, 'Move the requests to another column instead of deleting them');
 
   let target: ColumnRow | null = null;
   if (opts.mode === 'move') {

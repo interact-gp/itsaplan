@@ -4,6 +4,7 @@ import {
   db,
   issue,
   organizationGroups,
+  project,
   projectColumn,
   scimGroup,
   scimGroupMember,
@@ -853,5 +854,14 @@ describe('Slack bot', () => {
       expect(replies('chat.postMessage').filter((m) => m.channel === 'UMEMBER')).toHaveLength(1);
       expect(await issues(asOwner)).toHaveLength(1);
     });
+  });
+
+  it('confirms a task in a private request project only to its sender', async () => {
+    const { asOwner } = await world();
+    await db.update(project).set({ participantOnly: true }).where(eq(project.key, 'MKT'));
+    await deliver(mention('UOWNER', 'create a task in MKT to fix push notifications'));
+    expect(await issues(asOwner)).toHaveLength(1);
+    expect(replies('chat.postMessage').filter((m) => m.thread_ts)).toEqual([]);
+    expect(replies('chat.postEphemeral').at(-1)!.text).toContain('Created');
   });
 });

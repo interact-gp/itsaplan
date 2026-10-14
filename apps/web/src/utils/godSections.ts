@@ -3,6 +3,7 @@ import {
   Building2,
   FolderKanban,
   HardDrive,
+  Inbox,
   Keyboard,
   KeyRound,
   Mail,
@@ -66,6 +67,11 @@ export const GOD_SECTIONS: GodSection[] = [
     slug: 'storage',
     group: 'instance',
     icon: HardDrive,
+  },
+  {
+    slug: 'frnd-requests',
+    group: 'instance',
+    icon: Inbox,
   },
   {
     slug: 'telegram',

@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { db, issue, projectView } from '@repo/db';
+import { db, issue, project, projectView } from '@repo/db';
 import { eq } from 'drizzle-orm';
 import { getProjectById, type ProjectRow } from '#modules/projects/service';
+import { isIssueVisible } from '#shared/issue-visibility';
+import { HttpError } from '#shared/lib';
 import { listColumns } from '#modules/columns/service';
 import { listIssueTypes } from '#modules/issue-types/service';
 import { listLabels, listLabelGroups } from '#modules/labels/service';
@@ -179,6 +181,10 @@ export async function enableIssueShare(
     .from(issue)
     .where(eq(issue.id, issueId));
   if (rows.length === 0) return null;
+  // Public links show what anyone may see, and an issue of a participant-only project
+  // is for its participants only.
+  if (!(await isIssueVisible(issueId, null)))
+    throw new HttpError(400, 'Issues in this project cannot be shared publicly');
   const token = rows[0].token ?? randomUUID();
   await db
     .update(issue)
@@ -200,10 +206,13 @@ export async function disableIssueShare(issueId: number): Promise<boolean> {
 // Enables sharing for a view, the same way enableIssueShare does for an issue.
 export async function enableViewShare(viewId: number, extended?: boolean): Promise<string | null> {
   const rows = await db
-    .select({ token: projectView.shareToken })
+    .select({ token: projectView.shareToken, participantOnly: project.participantOnly })
     .from(projectView)
+    .innerJoin(project, eq(project.id, projectView.projectId))
     .where(eq(projectView.id, viewId));
   if (rows.length === 0) return null;
+  if (rows[0].participantOnly)
+    throw new HttpError(400, 'Views in this project cannot be shared publicly');
   const token = rows[0].token ?? randomUUID();
   await db
     .update(projectView)
@@ -226,7 +235,7 @@ export async function disableViewShare(viewId: number): Promise<boolean> {
 // The bundle for a shared issue link, or null if no issue carries the token.
 export async function getSharedIssue(token: string): Promise<SharedIssueBundle | null> {
   const issueRow = await getIssue(await issueIdByToken(token));
-  if (!issueRow) return null;
+  if (!issueRow || !(await isIssueVisible(issueRow.id, null))) return null;
   return issueBundle(issueRow, {
     keepShareToken: true,
     extended: issueRow.shareExtended,
@@ -242,7 +251,7 @@ export async function getSharedView(token: string): Promise<SharedViewBundle | n
   if (!project) return null;
   const [scaffold, issues] = await Promise.all([
     buildScaffold(project, view.shareExtended),
-    listIssues(project),
+    listIssues(project, null),
   ]);
   // Apply the view's own filters here so the bundle carries only the issues the
   // view shows, not the whole project. A public link must not expose issues the
@@ -298,7 +307,7 @@ export async function getSharedViewIssue(
   if (rows.length === 0) return null;
   const project = await getProjectById(rows[0].projectId);
   if (!project) return null;
-  const [columns, issues] = await Promise.all([listColumns(project.id), listIssues(project)]);
+  const [columns, issues] = await Promise.all([listColumns(project.id), listIssues(project, null)]);
   const shown = applyFilters(issues, rows[0].filters, columns);
   const issueRow = shown.find((i) => i.id === issueId);
   if (!issueRow) return null;

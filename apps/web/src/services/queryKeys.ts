@@ -176,6 +176,8 @@ export const qk = {
   agentToolLinks: (teamId: number, agentId: number) =>
     ['aiAgents', teamId, agentId, 'tool-configs'] as const,
   issue: (id: number) => ['issue', id] as const,
+  // The people added to a private request.
+  issueParticipants: (id: number) => ['issue', id, 'participants'] as const,
   issueDevelopmentRepositories: (id: number) =>
     ['issue', id, 'development', 'repositories'] as const,
   issueDevelopmentPullRequests: (id: number, repositoryId: number, state: 'open' | 'all') =>
@@ -258,6 +260,7 @@ export const qk = {
   instanceScimGroups: ['instanceScimGroups'] as const,
   instanceTelegramSettings: ['instanceTelegramSettings'] as const,
   slackReminderSettings: ['slackReminderSettings'] as const,
+  requestDeskSettings: ['requestDeskSettings'] as const,
   instanceProjectDefaults: ['instanceProjectDefaults'] as const,
   instanceStorageSettings: ['instanceStorageSettings'] as const,
   // The upload limits as read by the upload UI (open to any signed-in user).

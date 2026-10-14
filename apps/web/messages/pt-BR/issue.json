@@ -13,6 +13,7 @@
     "assignee": "Responsável",
     "delegate": "Delegado",
     "watching": "Acompanhando",
+    "participants": "Pessoas",
     "type": "Tipo",
     "labels": "Etiquetas",
     "initiative": "Iniciativa",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "removeu o responsável <v>{name}</v>",
     "assigneeChanged": "reatribuiu a <v>{name}</v>",
     "assigneeSet": "atribuiu a <v>{name}</v>",
+    "participantAdded": "adicionou <v>{name}</v>",
+    "participantRemoved": "removeu <v>{name}</v>",
     "delegateRemoved": "removeu o delegado <v>{name}</v>",
     "delegateChanged": "redelegou a <v>{name}</v>",
     "delegateSet": "delegou a <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Adicionar {name} como observador",
     "remove": "Remover {name} dos observadores",
     "watchingCount": "{count, plural, =0 {Nenhum observador} one {# observador} other {# observadores}}"
+  },
+  "participants": {
+    "manage": "Gerenciar pessoas",
+    "search": "Buscar membros do projeto…",
+    "empty": "Nenhum membro encontrado.",
+    "add": "Adicionar {name}",
+    "remove": "Remover {name}",
+    "none": "Ninguém adicionado",
+    "audience": "Somente quem pediu, a pessoa atribuída e as pessoas adicionadas aqui podem ver esta solicitação."
   },
   "effects": {
     "cleared": "Limpo",

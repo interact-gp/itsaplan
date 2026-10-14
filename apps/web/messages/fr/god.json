@@ -211,6 +211,15 @@
     "quotaMb": "Stockage par projet (Mo)",
     "quotaNote": "Dès qu'un projet atteint le quota, les nouveaux envois sont refusés jusqu'à ce que des pièces jointes soient supprimées."
   },
+  "frndRequests": {
+    "enrolment": "Inscrire tous les membres",
+    "enrolmentHint": "Ajoute toutes les personnes pouvant utiliser l’application au projet General Requests, maintenant et à leur arrivée. Activez-le une fois la confidentialité des demandes vérifiée.",
+    "on": "Activé : tous les membres sont dans General Requests.",
+    "off": "Désactivé : personne n’est inscrit automatiquement.",
+    "privacy": "Chaque demande n’est visible que par le demandeur, la personne assignée et les personnes ajoutées, y compris pour les administrateurs.",
+    "enabled": "Demandes FRND activées",
+    "disabled": "Demandes FRND désactivées"
+  },
   "telegram": {
     "saved": "Paramètres Telegram enregistrés",
     "bot": "Bot",

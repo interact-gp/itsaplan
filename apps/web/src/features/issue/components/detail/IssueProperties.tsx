@@ -25,6 +25,7 @@ import IssueTimeTracking from '../fields/IssueTimeTracking';
 import IssueCustomFieldControl from '../fields/IssueCustomFieldControl';
 import IssueCustomFieldBody from '../fields/IssueCustomFieldBody';
 import IssueWatchers from './IssueWatchers';
+import IssueParticipants from './IssueParticipants';
 import IssueSectionHeading from './IssueSectionHeading';
 import IssuePropertyRow from './IssuePropertyRow';
 import IssuePropertyGroupHeading from './IssuePropertyGroupHeading';
@@ -155,7 +156,18 @@ export default function IssueProperties({
               members={project.assignees.filter(
                 (assignee) => assignee.kind === 'member' && assignee.canReadWorkItems,
               )}
-              canManage={!readOnly}
+              // In a private request, people are brought in through the People row;
+              // the watcher picker would offer members who cannot see the request.
+              canManage={!readOnly && !project.project.participantOnly}
+            />
+          </IssuePropertyRow>
+        ),
+
+        watchers && project.project.participantOnly && (
+          <IssuePropertyRow key="participants" label={t('participants')}>
+            <IssueParticipants
+              issue={issue}
+              members={project.assignees.filter((assignee) => assignee.kind === 'member')}
             />
           </IssuePropertyRow>
         ),

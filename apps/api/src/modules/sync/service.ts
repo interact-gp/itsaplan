@@ -2,6 +2,7 @@ import { isOrganizationAdmin, db, projectMember, teamRole, revision } from '@rep
 import { and, eq, inArray } from 'drizzle-orm';
 import { toMemberContext, type MemberRole } from '#modules/members/service';
 import { hasPermission, type PermissionResource } from '#shared/permissions';
+import { isIssueVisible } from '#shared/issue-visibility';
 
 // The revision engine's read side. The counters themselves are written by the
 // triggers in migration 0070 — no application code bumps them, so a write moves
@@ -74,6 +75,10 @@ export async function readRevs(
       const { permissions } = toMemberContext(row.role as MemberRole, row.permissions);
       if (!hasPermission(permissions, resource, 'read')) continue;
     }
+    // An issue's counter says when it changed, which is not for someone who may not
+    // see the issue.
+    const issueId = row.scope.startsWith('issue:') ? Number(row.scope.slice(6)) : null;
+    if (issueId !== null && !(await isIssueVisible(issueId, userId))) continue;
     out[row.scope] = String(row.rev);
   }
   return out;

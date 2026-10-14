@@ -116,6 +116,8 @@ export const documentRoutes = new Elysia({
         archived: query.archived === 'true',
       }),
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       query: listDocumentsQuery,
       response: { 200: DocumentSummaryListResponse, ...commonErrors },
@@ -135,6 +137,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentParams,
       response: { 200: DocumentResponse, ...commonErrors },
@@ -160,6 +164,8 @@ export const documentRoutes = new Elysia({
       return links;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentParams,
       response: { 200: DocumentIssueLinkListResponse, ...commonErrors },
@@ -186,6 +192,8 @@ export const documentRoutes = new Elysia({
       return link;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: linkDocumentIssueBody,
@@ -213,6 +221,8 @@ export const documentRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentIssueParams,
       response: { 204: t.Void(), ...commonErrors },
@@ -233,6 +243,8 @@ export const documentRoutes = new Elysia({
       return links;
     },
     {
+      projectWide: true,
+
       permission: ['work_items', 'read'],
       params: issueDocumentsParams,
       response: { 200: IssueDocumentLinkListResponse, ...commonErrors },
@@ -253,6 +265,8 @@ export const documentRoutes = new Elysia({
       return links;
     },
     {
+      projectWide: true,
+
       permission: ['initiatives', 'read'],
       feature: 'initiatives',
       params: initiativeDocumentsParams,
@@ -279,6 +293,8 @@ export const documentRoutes = new Elysia({
       return link;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       feature: 'initiatives',
       params: documentParams,
@@ -307,6 +323,8 @@ export const documentRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       feature: 'initiatives',
       params: documentInitiativeParams,
@@ -326,6 +344,8 @@ export const documentRoutes = new Elysia({
       return assets.map((asset) => documentAssetDto(project.key, params.documentId, asset));
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentParams,
       response: { 200: DocumentAssetListResponse, ...commonErrors },
@@ -370,6 +390,8 @@ export const documentRoutes = new Elysia({
       }
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: uploadDocumentAssetBody,
@@ -400,6 +422,8 @@ export const documentRoutes = new Elysia({
       });
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentAssetParams,
       query: rawAttachmentQuery,
@@ -426,6 +450,8 @@ export const documentRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'delete'],
       params: documentAssetParams,
       response: { 204: t.Void(), ...commonErrors, ...errors(409) },
@@ -443,6 +469,8 @@ export const documentRoutes = new Elysia({
       return exported;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentParams,
       response: { 200: DocumentExportResponse, ...commonErrors },
@@ -465,6 +493,8 @@ export const documentRoutes = new Elysia({
       return revisions;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentParams,
       response: { 200: DocumentRevisionListResponse, ...commonErrors },
@@ -488,6 +518,8 @@ export const documentRoutes = new Elysia({
       return revision;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentRevisionParams,
       response: { 200: DocumentRevisionResponse, ...commonErrors },
@@ -516,6 +548,8 @@ export const documentRoutes = new Elysia({
       });
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'create'],
       body: createDocumentBody,
       response: { 201: DocumentResponse, ...commonErrors },
@@ -540,6 +574,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: updateDocumentBody,
@@ -567,6 +603,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: documentAccessBody,
@@ -595,6 +633,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: documentOwnershipBody,
@@ -623,6 +663,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: documentVersionBody,
@@ -646,6 +688,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentParams,
       body: documentVersionBody,
@@ -668,6 +712,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'delete'],
       params: documentParams,
       body: documentVersionBody,
@@ -695,6 +741,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'delete'],
       params: documentParams,
       body: documentVersionBody,
@@ -723,6 +771,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'create'],
       params: documentParams,
       body: duplicateDocumentBody,
@@ -748,6 +798,8 @@ export const documentRoutes = new Elysia({
       return preference;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'read'],
       params: documentParams,
       body: updateDocumentPreferenceBody,
@@ -773,6 +825,8 @@ export const documentRoutes = new Elysia({
       return document;
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'edit'],
       params: documentRevisionParams,
       body: documentVersionBody,
@@ -803,6 +857,8 @@ export const documentRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['documents', 'delete'],
       params: documentParams,
       query: deleteDocumentQuery,

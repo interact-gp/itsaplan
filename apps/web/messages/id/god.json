@@ -211,6 +211,15 @@
     "quotaMb": "Penyimpanan per proyek (MB)",
     "quotaNote": "Setelah proyek mencapai kuota, unggahan baru akan ditolak hingga seseorang menghapus lampiran."
   },
+  "frndRequests": {
+    "enrolment": "Daftarkan semua anggota",
+    "enrolmentHint": "Menambahkan semua orang yang dapat menggunakan aplikasi ke proyek General Requests, sekarang dan saat ada yang bergabung. Aktifkan setelah privasi permintaan diperiksa.",
+    "on": "Aktif: semua anggota ada di General Requests.",
+    "off": "Mati: tidak ada yang didaftarkan otomatis.",
+    "privacy": "Setiap permintaan hanya terlihat oleh peminta, penerima tugas, dan orang yang ditambahkan, termasuk bagi administrator.",
+    "enabled": "Permintaan FRND diaktifkan",
+    "disabled": "Permintaan FRND dimatikan"
+  },
   "telegram": {
     "saved": "Pengaturan Telegram disimpan",
     "bot": "Bot",

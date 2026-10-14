@@ -6,6 +6,8 @@ import { syncKeycloakAccess } from '#modules/organization/keycloak';
 import { retrySlackWork } from '#modules/slack/handler';
 import { provisionPersonalPages } from '#modules/personal-pages/service';
 import { runReminders } from '#modules/slack-reminders/service';
+import { provisionRequestDesk } from '#modules/frnd-requests/service';
+import { drainRequestMessages } from '#modules/frnd-requests/messages';
 import { managedAccess } from '@repo/db';
 
 // The api's background jobs, started by index.ts rather than assembled into the app,
@@ -24,6 +26,10 @@ export function startBackgroundJobs(): void {
   // Gives each member who may use the app their "My To-do" page, including people
   // who have not signed in yet, and retries anything a previous run left undone.
   startLoop('personal-pages', provisionPersonalPages, () => 30_000);
+  // Enrols every member in General Requests once an administrator has turned it on.
+  startLoop('frnd-requests', provisionRequestDesk, () => 30_000);
+  // Sends the private Slack messages about requests, including retries.
+  startLoop('frnd-request-messages', drainRequestMessages, () => 15_000);
   // Queues the Slack digest when its schedule comes due (it is off until one is set)
   // and sends queued digests, including retries.
   startLoop('slack-reminders', runReminders, () => 60_000);
