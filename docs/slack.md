@@ -15,8 +15,12 @@ do in the web app over MCP.
 ## How a mention is handled
 
 1. `POST /slack/events` checks the Slack signature and refuses a request older than five
-   minutes. Only events from `SLACK_TEAM_ID` are acted on. The event id is stored, so a
-   retried delivery creates nothing a second time.
+   minutes. Only events from `SLACK_TEAM_ID` are acted on. The event is stored with its
+   whole message before Slack is answered, so a retried delivery creates nothing a second
+   time, and work that failed (a Slack lookup error) or was interrupted is picked up again
+   by a background loop or a redelivery, up to five attempts. Just before the task is
+   created its description is recorded, so a retry after an interruption finds that task
+   instead of creating another.
 2. The sender is matched to an account by the email on their Slack profile, which must
    be the verified email of an active account with application access. The match is
    stored in `user_slack_account`. An email written in a message is never used.
@@ -33,10 +37,13 @@ do in the web app over MCP.
    other replies. Two answers handled at the same time complete the request once.
 4. The task is created through the same route the web app and MCP use, as the
    sender, so the route checks the account, the permission and the MCP switch again.
-5. A tagged assignee must be an active member of the project, or nothing is created.
-6. The bot replies with the link and sends the assignee a direct message. The reply is
-   in the thread when the message named the project, and visible only to the sender
-   when Jev chose it. Questions and refusals are always visible only to the sender, since
+5. A tagged assignee must be able to use the app and read the project's tasks (a role
+   can deny that to a member), or nothing is created.
+6. The bot replies with the link and sends the assignee a direct message. The two are
+   queued in `slack_bot_message` and sent and retried apart, so one failing does not
+   stop the other. The assignee's access is checked again right before their message is
+   sent. The reply is in the thread when the message named the project, and visible only
+   to the sender when Jev chose it. Questions and refusals are always visible only to the sender, since
    they can name projects other people in the channel cannot see.
 
 The task title is written by `anthropic/claude-haiku-5.5` through OpenRouter, with the

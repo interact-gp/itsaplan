@@ -2,10 +2,10 @@ import { getMcpApp } from '#mcp/app-ref';
 import { authorizedTools } from '#mcp/catalogue';
 import { dispatchTool } from '#mcp/dispatch';
 import { routeTools, type McpRouteTool } from '#mcp/generate';
-import { activeUser } from '#shared/auth-context';
-import { getMembership } from '#modules/members/service';
 import { getProjectByKey, listProjects } from '#modules/projects/service';
-import { escapeSlack, postDirect, postInThread, postPrivately } from './client';
+import { escapeSlack, postPrivately } from './client';
+import { canReadIssues, usable } from './access';
+import { queueBotMessages, sendBotMessages } from './messages';
 import {
   asksForProject,
   bareAnswer,
@@ -15,12 +15,16 @@ import {
   type ProjectOption,
 } from './interpret';
 import {
+  claimPendingRequest,
+  claimRetry,
   defaultColumnId,
   failSlackEvent,
-  finishSlackEvent,
-  resolveSlackUser,
-  claimPendingRequest,
   findPendingRequest,
+  finishSlackEvent,
+  planIssue,
+  plannedIssueId,
+  resolveSlackUser,
+  saveRequest,
   type SlackEventStatus,
   type SlackMention,
 } from './service';
@@ -53,12 +57,30 @@ export async function slackWorkSettled() {
   await Promise.all(running);
 }
 
-function link(url: string | undefined, label: string) {
-  return url ? `<${url}|${label}>` : label;
-}
+const RETRY_BATCH = 10;
 
-function appUrl(path: string) {
-  return process.env.APP_URL ? `${process.env.APP_URL}${path}` : undefined;
+// Run by a background loop: works again on events that failed or were interrupted,
+// from the request stored with them, then sends the replies still owed.
+export async function retrySlackWork(): Promise<void> {
+  if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_TEAM_ID) return;
+  for (let i = 0; i < RETRY_BATCH; i++) {
+    const row = await claimRetry();
+    if (!row) break;
+    const mention: SlackMention = {
+      eventId: row.eventId,
+      slackTeamId: row.slackTeamId,
+      channelId: row.channelId,
+      messageTs: row.messageTs,
+      threadTs: row.threadTs,
+      slackUserId: row.slackUserId,
+      text: row.request,
+    };
+    await handleMention(mention, row.botUserId ?? undefined).catch(async (err) => {
+      console.error('[slack]', err);
+      await failSlackEvent(row.eventId);
+    });
+  }
+  await sendBotMessages();
 }
 
 function routeError(text: string) {
@@ -69,14 +91,6 @@ function routeError(text: string) {
     // not JSON
   }
   return 'the request was refused';
-}
-
-async function usable(userId: string) {
-  try {
-    return Boolean(await activeUser(userId));
-  } catch {
-    return false;
-  }
 }
 
 async function creatableProjects(userId: string): Promise<ProjectOption[]> {
@@ -130,6 +144,7 @@ export async function handleMention(mention: SlackMention, botUserId: string | u
       return;
     }
     request = `${pending.request}\n${text}`;
+    await saveRequest(mention.eventId, request);
   } else if (bareAnswer(text, projects)) {
     // Only a project name, with no question waiting for it (or another answer took
     // it first): there is no task to create.
@@ -156,21 +171,16 @@ export async function handleMention(mention: SlackMention, botUserId: string | u
     );
     return;
   }
-  // A project the sender did not name may be one the channel cannot see, so only the
-  // sender is told where the task went.
-  const announce = intent.named
-    ? (message: string) => postInThread(channelId, threadTs, message)
-    : tell;
   await createIssue(
     mention,
     userId,
     request,
     tool,
     intent.project,
+    intent.named,
     botUserId,
     finish,
     tell,
-    announce,
   );
 }
 
@@ -180,10 +190,10 @@ async function createIssue(
   request: string,
   tool: McpRouteTool,
   target: ProjectOption,
+  named: boolean,
   botUserId: string | undefined,
   finish: (status: SlackEventStatus, extra?: Outcome) => Promise<void>,
   tell: (text: string) => Promise<void>,
-  announce: (text: string) => Promise<void>,
 ) {
   const project = await getProjectByKey(target.key);
   const columnId = project ? await defaultColumnId(project.id) : null;
@@ -204,52 +214,69 @@ async function createIssue(
   const assigneeSlackId = tagged[0];
   let assigneeUserId: string | undefined;
   if (assigneeSlackId) {
+    // The assignee is sent the task's title, so they must be able to read the
+    // project's tasks, not only belong to it.
     const id = await resolveSlackUser(mention.slackTeamId, assigneeSlackId);
-    if (!id || !(await usable(id)) || !(await getMembership(project.id, id))) {
+    if (!id || !(await canReadIssues(project.id, id))) {
       await finish('refused');
       await tell(
-        `<@${assigneeSlackId}> is not a member of ${target.key}, so I did not create the task. A project admin has to add them first.`,
+        `<@${assigneeSlackId}> is not a member of ${target.key} who can see its tasks, so I did not create the task. A project admin has to give them access first.`,
       );
       return;
     }
     assigneeUserId = id;
   }
 
-  const title = await issueTitle(request);
-  const result = await dispatchTool(
-    getMcpApp(),
-    tool,
-    {
-      projectKey: target.key,
-      columnId,
-      title,
-      description: `Created from a Slack request:\n\n> ${plainRequest(request)}`,
-      ...(assigneeUserId ? { assigneeUserId } : {}),
-    },
-    { kind: 'user', userId },
-    { viaMcpEndpoint: true },
-  );
-  if (result.isError) {
-    await finish('failed');
-    await tell(`I could not create the task: ${routeError(result.text)}.`);
-    return;
+  // A retry after an interruption finds the task the first run made, by the
+  // description recorded just before it was created, instead of making another.
+  const description = `Created from a Slack request:\n\n> ${plainRequest(request)}`;
+  let issueId = await plannedIssueId(mention.eventId);
+  if (issueId === null) {
+    await planIssue(mention.eventId, project.id, description);
+    const title = await issueTitle(request);
+    const result = await dispatchTool(
+      getMcpApp(),
+      tool,
+      {
+        projectKey: target.key,
+        columnId,
+        title,
+        description,
+        ...(assigneeUserId ? { assigneeUserId } : {}),
+      },
+      { kind: 'user', userId },
+      { viaMcpEndpoint: true },
+    );
+    if (result.isError) {
+      await finish('failed');
+      await tell(`I could not create the task: ${routeError(result.text)}.`);
+      return;
+    }
+    issueId = (JSON.parse(result.text) as { id: number }).id;
   }
-  const issue = JSON.parse(result.text) as {
-    id: number;
-    identifier: string;
-    sequenceNumber: number;
-    title: string;
-  };
-  await finish('done', { issueId: issue.id, projectId: project.id });
-  const label = link(
-    appUrl(`/project/${target.key}/issue/${issue.sequenceNumber}`),
-    issue.identifier,
-  );
-  const shown = escapeSlack(issue.title);
-  await announce(`Created ${label}: ${shown}`);
-  if (assigneeSlackId && assigneeSlackId !== mention.slackUserId)
-    await postDirect(
-      assigneeSlackId,
-      `<@${mention.slackUserId}> assigned you ${label}: ${shown}`,
-    ).catch((err) => console.error('[slack] assignee message failed', err));
+  await finish('done', { issueId, projectId: project.id });
+
+  // The confirmation and the assignee's message are sent apart and retried apart.
+  // A project the sender did not name may be one the channel cannot see, so then only
+  // the sender is told where the task went.
+  await queueBotMessages([
+    {
+      eventId: mention.eventId,
+      kind: named ? 'thread_reply' : 'private_reply',
+      issueId,
+      slackUserId: mention.slackUserId,
+    },
+    ...(assigneeSlackId && assigneeUserId && assigneeSlackId !== mention.slackUserId
+      ? [
+          {
+            eventId: mention.eventId,
+            kind: 'assignee' as const,
+            issueId,
+            slackUserId: assigneeSlackId,
+            userId: assigneeUserId,
+          },
+        ]
+      : []),
+  ]);
+  await sendBotMessages(mention.eventId);
 }

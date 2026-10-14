@@ -6,6 +6,7 @@ import {
   scimGroup,
   scimGroupMember,
   setSetting,
+  slackBotMessage,
   slackEvent,
   user,
 } from '@repo/db';
@@ -14,7 +15,7 @@ import { app, authedApi, type Api } from '#tests/helpers/app';
 import { signUpTestUser, type TestUser } from '#tests/helpers/auth';
 import { resetDb } from '#tests/helpers/db';
 import { createRole, teamIdOf } from '#tests/helpers/roles';
-import { slackWorkSettled } from '../../handler';
+import { retrySlackWork, slackWorkSettled } from '../../handler';
 
 // The Slack bot: a signed @mention becomes a task or project created as the Slack
 // user who sent it, through the same route and permission checks as the web app.
@@ -38,6 +39,8 @@ let title: string;
 let titleRequests: string[];
 // Slack methods the stub answers with an error.
 let failing: Set<string>;
+// Channels (or user ids, for a direct message) chat.postMessage fails for.
+let failingChannels: Set<string>;
 let fetchSpy: ReturnType<typeof spyOn>;
 
 function distribution(choice: string, options: string[]) {
@@ -61,6 +64,9 @@ function stubFetch() {
     if (url.startsWith('https://slack.com/api/')) {
       const method = url.slice('https://slack.com/api/'.length);
       const args = Object.fromEntries(new URLSearchParams(String(init?.body ?? '')));
+      // A message to a failing channel is refused and not recorded as sent.
+      if (method === 'chat.postMessage' && failingChannels.has(args.channel!))
+        return Response.json({ ok: false, error: 'internal_error' });
       sent.push({ method, args });
       if (failing.has(method)) return Response.json({ ok: false, error: 'internal_error' });
       if (method === 'users.info') {
@@ -242,6 +248,7 @@ describe('Slack bot', () => {
     title = 'Fix push notifications';
     titleRequests = [];
     failing = new Set();
+    failingChannels = new Set();
     stubFetch();
   });
 
@@ -593,6 +600,106 @@ describe('Slack bot', () => {
       expect(replies('chat.postMessage')).toHaveLength(0);
       for (const reply of replies('chat.postEphemeral'))
         expect(reply.text).toContain('I can only add tasks to existing projects');
+    });
+  });
+
+  // Found in review of PR #2. Each test reproduces one of the reported failures.
+  describe('review fixes', () => {
+    // Makes every queued retry due now, as the background loop would find it later.
+    async function dueNow() {
+      await db.update(slackEvent).set({ nextAttemptAt: new Date(Date.now() - 1000) });
+      await db.update(slackBotMessage).set({ nextAttemptAt: new Date(Date.now() - 1000) });
+    }
+
+    it('does not assign or message someone whose role cannot read tasks', async () => {
+      const { asOwner } = await world();
+      const viewer = await signUpTestUser({ name: 'No read' });
+      const role = await createRole(asOwner, 'MKT', {
+        name: 'No read',
+        permissions: { work_items: { read: false } },
+      });
+      await join(asOwner, 'MKT', viewer, role.data!.id);
+      await verified(viewer, 'UNOREAD');
+      await deliver(mention('UOWNER', 'create a task in MKT to fix push and assign <@UNOREAD>'));
+      expect(await issues(asOwner)).toHaveLength(0);
+      expect(replies('chat.postMessage').filter((m) => m.channel === 'UNOREAD')).toEqual([]);
+      expect(replies('chat.postEphemeral').at(-1)!.text).toContain('who can see its tasks');
+    });
+
+    it('checks the assignee again before a retried message is sent', async () => {
+      const { asOwner, member } = await world();
+      failingChannels.add('UMEMBER');
+      await deliver(
+        mention('UOWNER', 'create a task in MKT to fix push notifications and assign <@UMEMBER>'),
+      );
+      expect(await issues(asOwner)).toHaveLength(1);
+      await db.update(user).set({ active: false }).where(eq(user.id, member.userId));
+      failingChannels.clear();
+      await dueNow();
+      await retrySlackWork();
+      expect(replies('chat.postMessage').filter((m) => m.channel === 'UMEMBER')).toEqual([]);
+      const [dm] = await db
+        .select()
+        .from(slackBotMessage)
+        .where(eq(slackBotMessage.kind, 'assignee'));
+      expect(dm!.status).toBe('skipped');
+    });
+
+    it('keeps a request Slack sent while lookups failed, and creates it once later', async () => {
+      const { asOwner } = await world();
+      failing.add('users.info');
+      const event = mention('UMEMBER', 'create a task in MKT to fix push notifications', {
+        eventId: 'EvLost',
+      });
+      expect((await deliver(event)).status).toBe(200);
+      expect(await issues(asOwner)).toHaveLength(0);
+      const [stored] = await db.select().from(slackEvent).where(eq(slackEvent.eventId, 'EvLost'));
+      expect(stored!.status).toBe('failed');
+      expect(stored!.request).toContain('fix push notifications');
+
+      failing.clear();
+      await deliver(event);
+      await dueNow();
+      await retrySlackWork();
+      expect(await issues(asOwner)).toHaveLength(1);
+    });
+
+    it('recovers an interrupted request without creating the task twice', async () => {
+      const { asOwner } = await world();
+      await deliver(
+        mention('UMEMBER', 'create a task in MKT to fix push notifications', {
+          eventId: 'EvCut',
+        }),
+      );
+      expect(await issues(asOwner)).toHaveLength(1);
+      // As if the process stopped after creating the task, before recording it.
+      await db
+        .update(slackEvent)
+        .set({ status: 'received', issueId: null, updatedAt: new Date(Date.now() - 10 * 60_000) })
+        .where(eq(slackEvent.eventId, 'EvCut'));
+      await retrySlackWork();
+      expect(await issues(asOwner)).toHaveLength(1);
+      const [row] = await db.select().from(slackEvent).where(eq(slackEvent.eventId, 'EvCut'));
+      expect(row!.status).toBe('done');
+      expect(row!.issueId).not.toBeNull();
+    });
+
+    it('sends the assignee message even when the thread reply fails, and retries the reply alone', async () => {
+      const { asOwner } = await world();
+      failingChannels.add('C1');
+      await deliver(
+        mention('UOWNER', 'create a task in MKT to fix push notifications and assign <@UMEMBER>'),
+      );
+      expect(await issues(asOwner)).toHaveLength(1);
+      expect(replies('chat.postMessage').filter((m) => m.channel === 'UMEMBER')).toHaveLength(1);
+      expect(replies('chat.postMessage').filter((m) => m.thread_ts)).toHaveLength(0);
+
+      failingChannels.clear();
+      await dueNow();
+      await retrySlackWork();
+      expect(replies('chat.postMessage').filter((m) => m.thread_ts)).toHaveLength(1);
+      expect(replies('chat.postMessage').filter((m) => m.channel === 'UMEMBER')).toHaveLength(1);
+      expect(await issues(asOwner)).toHaveLength(1);
     });
   });
 });

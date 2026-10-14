@@ -1,5 +1,5 @@
-import { db, projectColumn, slackEvent, user, userSlackAccount } from '@repo/db';
-import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
+import { db, issue, projectColumn, slackEvent, user, userSlackAccount } from '@repo/db';
+import { and, asc, desc, eq, gt, gte, sql } from 'drizzle-orm';
 import { slackProfile } from './client';
 
 export interface SlackMention {
@@ -14,9 +14,20 @@ export interface SlackMention {
 
 export type SlackEventStatus = 'clarify' | 'done' | 'refused' | 'failed';
 
-// Records the event. False when the event id was seen before, which is how a Slack
-// retry of the same delivery is dropped: two concurrent inserts cannot both succeed.
-export async function claimSlackEvent(mention: SlackMention): Promise<boolean> {
+// How long an accepted event may stay unfinished before it counts as interrupted, and
+// how often one is tried before it is left failed.
+const STALE = sql`interval '2 minutes'`;
+const MAX_ATTEMPTS = 5;
+
+// Records the event with its whole message before Slack is answered, so nothing it
+// asked for depends on the work that follows. False when the event id was seen and
+// is finished or still being worked on, which is how a Slack retry of the same
+// delivery is dropped: two concurrent claims cannot both succeed. A redelivery of one
+// that failed or was interrupted claims it again.
+export async function claimSlackEvent(
+  mention: SlackMention,
+  botUserId: string | undefined,
+): Promise<boolean> {
   const rows = await db
     .insert(slackEvent)
     .values({
@@ -26,10 +37,85 @@ export async function claimSlackEvent(mention: SlackMention): Promise<boolean> {
       messageTs: mention.messageTs,
       threadTs: mention.threadTs,
       slackUserId: mention.slackUserId,
+      botUserId: botUserId ?? null,
+      request: mention.text,
+      attempts: 1,
     })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: slackEvent.eventId,
+      set: {
+        status: 'received',
+        attempts: sql`${slackEvent.attempts} + 1`,
+        updatedAt: sql`now()`,
+      },
+      setWhere: sql`${slackEvent.attempts} < ${MAX_ATTEMPTS} AND (${slackEvent.status} = 'failed' OR (${slackEvent.status} = 'received' AND ${slackEvent.updatedAt} < now() - ${STALE}))`,
+    })
     .returning({ eventId: slackEvent.eventId });
   return rows.length > 0;
+}
+
+export type StoredEvent = typeof slackEvent.$inferSelect;
+
+export async function storedEvent(eventId: string): Promise<StoredEvent | null> {
+  const [row] = await db.select().from(slackEvent).where(eq(slackEvent.eventId, eventId));
+  return row ?? null;
+}
+
+// The next event to try again: one that failed and is due, or one left unfinished
+// past the time a run takes. Claiming it moves it forward, so no two runs take it.
+export async function claimRetry(): Promise<StoredEvent | null> {
+  const rows = await db.execute<StoredEvent>(sql`
+    UPDATE ${slackEvent}
+    SET status = 'received', attempts = attempts + 1, updated_at = now()
+    WHERE event_id = (
+      SELECT event_id FROM ${slackEvent}
+      WHERE attempts < ${MAX_ATTEMPTS} AND (
+        (status = 'failed' AND next_attempt_at <= now())
+        OR (status = 'received' AND updated_at < now() - ${STALE})
+      )
+      ORDER BY next_attempt_at
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING event_id AS "eventId", slack_team_id AS "slackTeamId", channel_id AS "channelId",
+      message_ts AS "messageTs", thread_ts AS "threadTs", slack_user_id AS "slackUserId",
+      bot_user_id AS "botUserId", request`);
+  return rows[0] ?? null;
+}
+
+// Keeps what the request has become, so a retry starts from it.
+export async function saveRequest(eventId: string, request: string) {
+  await db
+    .update(slackEvent)
+    .set({ request, updatedAt: sql`now()` })
+    .where(eq(slackEvent.eventId, eventId));
+}
+
+// Recorded before the task is created: a retry after an interruption looks for a task
+// with this description in this project, created after the event, before making one.
+export async function planIssue(eventId: string, projectId: number, description: string) {
+  await db
+    .update(slackEvent)
+    .set({ projectId, issueDescription: description, updatedAt: sql`now()` })
+    .where(eq(slackEvent.eventId, eventId));
+}
+
+export async function plannedIssueId(eventId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ id: issue.id })
+    .from(slackEvent)
+    .innerJoin(
+      issue,
+      and(
+        eq(issue.projectId, slackEvent.projectId),
+        eq(issue.description, slackEvent.issueDescription),
+        gte(issue.createdAt, slackEvent.createdAt),
+      ),
+    )
+    .where(eq(slackEvent.eventId, eventId))
+    .orderBy(asc(issue.id))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 export async function finishSlackEvent(
@@ -42,15 +128,23 @@ export async function finishSlackEvent(
     projectId?: number;
   },
 ) {
-  await db.update(slackEvent).set(outcome).where(eq(slackEvent.eventId, eventId));
+  await db
+    .update(slackEvent)
+    .set({ ...outcome, updatedAt: sql`now()` })
+    .where(eq(slackEvent.eventId, eventId));
 }
 
-// Marks an event failed unless it already has an outcome: an error raised while
-// replying must not hide a task that was created or a question that was asked.
+// Marks an event failed unless it already has an outcome, and schedules the next try
+// further out each time. An error raised after the task was created or a question was
+// asked does not undo that outcome.
 export async function failSlackEvent(eventId: string) {
   await db
     .update(slackEvent)
-    .set({ status: 'failed' })
+    .set({
+      status: 'failed',
+      updatedAt: sql`now()`,
+      nextAttemptAt: sql`now() + make_interval(mins => power(2, ${slackEvent.attempts})::int)`,
+    })
     .where(and(eq(slackEvent.eventId, eventId), eq(slackEvent.status, 'received')));
 }
 

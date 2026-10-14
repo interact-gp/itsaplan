@@ -65,8 +65,8 @@ export const slackRoutes = new Elysia({ name: 'slack', detail: { tags: ['Slack']
       slackUserId: event.user,
       text: event.text ?? '',
     };
-    if (await claimSlackEvent(mention))
-      handleInBackground(mention, payload.authorizations?.[0]?.user_id);
+    const botUserId = payload.authorizations?.[0]?.user_id;
+    if (await claimSlackEvent(mention, botUserId)) handleInBackground(mention, botUserId);
     return { ok: true };
   },
   {
