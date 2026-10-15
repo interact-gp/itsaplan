@@ -13,6 +13,7 @@
     "assignee": "Penerima tugas",
     "delegate": "Delegasi",
     "watching": "Mengikuti",
+    "participants": "Orang",
     "type": "Tipe",
     "labels": "Label",
     "initiative": "Inisiatif",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "menghapus penerima tugas <v>{name}</v>",
     "assigneeChanged": "menugaskan ulang ke <v>{name}</v>",
     "assigneeSet": "menugaskan ke <v>{name}</v>",
+    "participantAdded": "menambahkan <v>{name}</v>",
+    "participantRemoved": "menghapus <v>{name}</v>",
     "delegateRemoved": "menghapus delegasi <v>{name}</v>",
     "delegateChanged": "mendelegasikan ulang ke <v>{name}</v>",
     "delegateSet": "mendelegasikan ke <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Tambahkan {name} sebagai pengikut",
     "remove": "Hapus {name} dari daftar pengikut",
     "watchingCount": "{count, plural, =0 {Tidak ada pengikut} one {# pengikut} other {# pengikut}}"
+  },
+  "participants": {
+    "manage": "Kelola orang",
+    "search": "Cari anggota proyek…",
+    "empty": "Tidak ada anggota.",
+    "add": "Tambahkan {name}",
+    "remove": "Hapus {name}",
+    "none": "Belum ada yang ditambahkan",
+    "audience": "Hanya peminta, penerima tugas, dan orang yang ditambahkan di sini yang dapat melihat permintaan ini."
   },
   "effects": {
     "cleared": "Dikosongkan",

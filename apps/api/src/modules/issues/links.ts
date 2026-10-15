@@ -5,6 +5,7 @@ import { HttpError } from '#shared/lib';
 import { recordActivityEntries, rowSide, textSide, type ActivityInput } from './activity';
 import { emitWebhookEvents } from '#modules/webhooks/emit';
 import { getIssues } from './service';
+import { isParticipantOnlyProject } from '#shared/issue-visibility';
 
 // Relations between issues of one project. A relation is one row (issue_link);
 // which side of it an issue sits on decides how the relation reads for that
@@ -231,6 +232,13 @@ export async function addIssueLink(
   actorUserId?: string | null,
 ): Promise<IssueLinkRow> {
   if (issueId === targetIssueId) throw new HttpError(400, 'An issue cannot be linked to itself');
+  // A link shows each end's title to whoever sees the other end.
+  const [source] = await db
+    .select({ projectId: issue.projectId })
+    .from(issue)
+    .where(eq(issue.id, issueId));
+  if (source && (await isParticipantOnlyProject(source.projectId)))
+    throw new HttpError(400, 'Requests in this project cannot be linked');
   const stored = storedLink(issueId, targetIssueId, kind);
 
   const { target, linkId } = await db.transaction(async (tx) => {

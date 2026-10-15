@@ -13,6 +13,7 @@
     "assignee": "Asignatario",
     "delegate": "Delegado",
     "watching": "Siguiendo",
+    "participants": "Personas",
     "type": "Tipo",
     "labels": "Etiquetas",
     "initiative": "Iniciativa",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "ha quitado al asignado <v>{name}</v>",
     "assigneeChanged": "la ha reasignado a <v>{name}</v>",
     "assigneeSet": "la ha asignado a <v>{name}</v>",
+    "participantAdded": "añadió a <v>{name}</v>",
+    "participantRemoved": "quitó a <v>{name}</v>",
     "delegateRemoved": "ha quitado al delegado <v>{name}</v>",
     "delegateChanged": "la ha redelegado a <v>{name}</v>",
     "delegateSet": "la ha delegado a <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Añadir a {name} como seguidor",
     "remove": "Quitar a {name} de los seguidores",
     "watchingCount": "{count, plural, =0 {Sin seguidores} one {# seguidor} other {# seguidores}}"
+  },
+  "participants": {
+    "manage": "Gestionar personas",
+    "search": "Buscar miembros del proyecto…",
+    "empty": "No se encontraron miembros.",
+    "add": "Añadir a {name}",
+    "remove": "Quitar a {name}",
+    "none": "Nadie añadido",
+    "audience": "Solo quien lo pidió, la persona asignada y las personas añadidas aquí pueden ver esta solicitud."
   },
   "effects": {
     "cleared": "Vacío",

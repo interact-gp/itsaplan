@@ -13,6 +13,7 @@
     "assignee": "负责人",
     "delegate": "执行代理",
     "watching": "正在关注",
+    "participants": "成员",
     "type": "类型",
     "labels": "标签",
     "initiative": "计划",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "移除了负责人 <v>{name}</v>",
     "assigneeChanged": "将负责人更改为 <v>{name}</v>",
     "assigneeSet": "指派给 <v>{name}</v>",
+    "participantAdded": "添加了 <v>{name}</v>",
+    "participantRemoved": "移除了 <v>{name}</v>",
     "delegateRemoved": "移除了执行代理 <v>{name}</v>",
     "delegateChanged": "将执行代理更改为 <v>{name}</v>",
     "delegateSet": "委派给 <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "将 {name} 添加为关注者",
     "remove": "从关注者中移除 {name}",
     "watchingCount": "{count} 位关注者"
+  },
+  "participants": {
+    "manage": "管理成员",
+    "search": "搜索项目成员…",
+    "empty": "未找到成员。",
+    "add": "添加 {name}",
+    "remove": "移除 {name}",
+    "none": "尚未添加任何人",
+    "audience": "只有请求人、负责人和此处添加的人可以看到此请求。"
   },
   "effects": {
     "cleared": "已清除",

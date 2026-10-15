@@ -39,6 +39,8 @@ export interface Issue {
   // The cycle this issue is planned into, expanded to id + name for rendering, or
   // null. Set through updateIssue by cycleId.
   cycle: CycleRef | null;
+  // Who created the issue. In a participant-only project they always keep access.
+  createdByUserId: string | null;
   assigneeUserId: string | null;
   delegateUserId: string | null;
   columnId: number;
@@ -394,6 +396,23 @@ export const addIssueWatcher = (issueId: number, userId: string) =>
 
 export const removeIssueWatcher = (issueId: number, userId: string) =>
   request<IssueWatcher[]>(`/issues/${issueId}/watchers/${userId}`, { method: 'DELETE' });
+
+// The people added to a private request, besides its creator and its assignee.
+export interface IssueParticipant {
+  userId: string;
+  name: string;
+  image: string | null;
+  addedByUserId: string | null;
+}
+
+export const getIssueParticipants = (issueId: number) =>
+  request<IssueParticipant[]>(`/issues/${issueId}/participants`);
+
+export const addIssueParticipant = (issueId: number, userId: string) =>
+  request<IssueParticipant[]>(`/issues/${issueId}/participants/${userId}`, { method: 'PUT' });
+
+export const removeIssueParticipant = (issueId: number, userId: string) =>
+  request<IssueParticipant[]>(`/issues/${issueId}/participants/${userId}`, { method: 'DELETE' });
 
 export const setFieldValue = (issueId: number, fieldId: number, input: IssueFieldValueInput) =>
   request<{ ok: boolean }>(`/issues/${issueId}/fields/${fieldId}`, {

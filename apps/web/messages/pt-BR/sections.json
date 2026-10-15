@@ -39,6 +39,10 @@
       "label": "Armazenamento",
       "description": "Quanto as pessoas podem enviar: o tamanho de um único arquivo, os tipos de anexo aceitos e o armazenamento que cada projeto recebe."
     },
+    "frnd-requests": {
+      "label": "Solicitações FRND",
+      "description": "Um projeto compartilhado onde cada membro pode pedir algo a outro. Cada solicitação fica privada para as pessoas envolvidas."
+    },
     "telegram": {
       "label": "Telegram",
       "description": "O bot ao qual as pessoas conectam sua conta do Telegram, e o que entrega notificações do Telegram para projetos que não definem seu próprio bot."

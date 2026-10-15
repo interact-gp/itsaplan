@@ -72,7 +72,10 @@ function permissionDetail(permission: Permission) {
 export function entityGuard(
   resource: PermissionResource,
   notFound: string,
-  resolveProjectId: (params: Record<string, string>) => Promise<number | null>,
+  resolveProjectId: (
+    params: Record<string, string>,
+    userId: string | null,
+  ) => Promise<number | null>,
   feature?: ProjectFeature,
 ) {
   return (action: PermissionAction) => ({
@@ -81,7 +84,7 @@ export function entityGuard(
       ...(feature ? { 'x-feature': feature } : {}),
     } as DocumentDecoration,
     async resolve({ params, user, request }: EntityGuardCtx) {
-      const projectId = await resolveProjectId(params as Record<string, string>);
+      const projectId = await resolveProjectId(params as Record<string, string>, user?.id ?? null);
       if (projectId == null) throw new HttpError(404, notFound);
       await assertPermission(projectId, user, resource, action);
       if (feature) await assertProjectFeature(projectId, feature);
@@ -162,6 +165,19 @@ export const guards = new Elysia({ name: 'guards' }).use(authContext).macro({
       async resolve({ params, user }) {
         const project = await requireProjectAccess((params as ProjectKeyParams).projectKey, user);
         assertFeatureEnabled(project, name);
+      },
+    };
+  },
+
+  // A route that reads or writes the project as a whole (statistics, activity feeds,
+  // imports, webhooks). A participant-only project keeps each issue to its
+  // participants, so these are closed there for everyone, administrators included.
+  projectWide(_enabled: boolean) {
+    return {
+      async resolve({ params, user }) {
+        const project = await requireProjectAccess((params as ProjectKeyParams).projectKey, user);
+        if (project.participantOnly)
+          throw new HttpError(403, 'This project keeps each request private to its participants');
       },
     };
   },

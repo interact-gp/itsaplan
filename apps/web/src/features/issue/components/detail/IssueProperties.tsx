@@ -25,6 +25,7 @@ import IssueTimeTracking from '../fields/IssueTimeTracking';
 import IssueCustomFieldControl from '../fields/IssueCustomFieldControl';
 import IssueCustomFieldBody from '../fields/IssueCustomFieldBody';
 import IssueWatchers from './IssueWatchers';
+import IssueParticipants from './IssueParticipants';
 import IssueSectionHeading from './IssueSectionHeading';
 import IssuePropertyRow from './IssuePropertyRow';
 import IssuePropertyGroupHeading from './IssuePropertyGroupHeading';
@@ -32,6 +33,8 @@ import { type Embeddable } from '@/components/common/editor/attachmentEmbed';
 import { parseDate } from '@/utils/dates';
 import { cn } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
+import { useSession } from '@/lib/auth-client';
+import { managesRequest } from '../../utils/requestAccess';
 
 // The Properties grid of the issue detail: built-in fields and non-markdown
 // custom fields, each editable inline. Shaped like the Attachments and Links
@@ -79,6 +82,7 @@ export default function IssueProperties({
   groupsOpen: { isOpen: (key: string) => boolean; toggle: (key: string) => void };
 }) {
   const t = useTranslations('issue.fields');
+  const { data: session } = useSession();
   const hasMembers = project.assignees.some((a) => a.kind === 'member');
   const hasAgents = project.assignees.some((a) => a.kind === 'agent');
   // The calendars grey out days that would put one date on the wrong side of the
@@ -131,7 +135,11 @@ export default function IssueProperties({
               assignees={project.assignees}
               value={issue.assigneeUserId}
               onChange={(userId) => onPatch({ assigneeUserId: userId })}
-              readOnly={readOnly}
+              readOnly={
+                readOnly ||
+                (project.project.participantOnly &&
+                  !managesRequest(issue, session?.user.id ?? null))
+              }
             />
           </IssuePropertyRow>
         ),
@@ -155,7 +163,18 @@ export default function IssueProperties({
               members={project.assignees.filter(
                 (assignee) => assignee.kind === 'member' && assignee.canReadWorkItems,
               )}
-              canManage={!readOnly}
+              // In a private request, people are brought in through the People row;
+              // the watcher picker would offer members who cannot see the request.
+              canManage={!readOnly && !project.project.participantOnly}
+            />
+          </IssuePropertyRow>
+        ),
+
+        watchers && project.project.participantOnly && (
+          <IssuePropertyRow key="participants" label={t('participants')}>
+            <IssueParticipants
+              issue={issue}
+              members={project.assignees.filter((assignee) => assignee.kind === 'member')}
             />
           </IssuePropertyRow>
         ),

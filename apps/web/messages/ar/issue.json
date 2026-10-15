@@ -13,6 +13,7 @@
     "assignee": "المسؤول",
     "delegate": "المفوَّض",
     "watching": "المتابعة",
+    "participants": "الأشخاص",
     "type": "النوع",
     "labels": "الوسوم",
     "initiative": "المبادرة",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "أزال المسؤول <v>{name}</v>",
     "assigneeChanged": "أعاد الإسناد إلى <v>{name}</v>",
     "assigneeSet": "أسند إلى <v>{name}</v>",
+    "participantAdded": "أضاف <v>{name}</v>",
+    "participantRemoved": "أزال <v>{name}</v>",
     "delegateRemoved": "أزال المفوَّض <v>{name}</v>",
     "delegateChanged": "أعاد التفويض إلى <v>{name}</v>",
     "delegateSet": "فوّض إلى <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "إضافة {name} كمتابع",
     "remove": "إزالة {name} من المتابعين",
     "watchingCount": "{count} متابع"
+  },
+  "participants": {
+    "manage": "إدارة الأشخاص",
+    "search": "ابحث عن أعضاء المشروع…",
+    "empty": "لم يتم العثور على أعضاء.",
+    "add": "إضافة {name}",
+    "remove": "إزالة {name}",
+    "none": "لم تتم إضافة أحد",
+    "audience": "لا يرى هذا الطلب إلا مقدّمه والمكلّف به والأشخاص المضافون هنا."
   },
   "effects": {
     "cleared": "تم المسح",

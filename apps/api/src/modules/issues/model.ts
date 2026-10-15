@@ -91,6 +91,7 @@ export const IssueResponse = t.Object({
   // and status to filter by the running or the upcoming ones. Create and update set it
   // through cycleId.
   cycle: t.Nullable(t.Object({ id: t.Number(), name: t.String(), status: t.String() })),
+  createdByUserId: t.Nullable(t.String()),
   assigneeUserId: t.Nullable(t.String()),
   delegateUserId: t.Nullable(t.String()),
   columnId: t.Number(),
@@ -209,6 +210,13 @@ export const IssueWatcherResponse = t.Object({
   userId: t.String(),
   name: t.String(),
   image: t.Nullable(t.String()),
+});
+
+export const IssueParticipantResponse = t.Object({
+  userId: t.String(),
+  name: t.String(),
+  image: t.Nullable(t.String()),
+  addedByUserId: t.Nullable(t.String()),
 });
 
 export const issueWatcherParams = t.Object({

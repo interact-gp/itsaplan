@@ -37,6 +37,8 @@ export type ActivityAction =
   | 'status'
   | 'assignee'
   | 'delegate'
+  | 'participant_added'
+  | 'participant_removed'
   | 'priority'
   | 'estimate'
   | 'type'

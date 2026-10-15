@@ -39,6 +39,10 @@
       "label": "存储",
       "description": "设置单个文件大小、允许的附件类型和每个项目的存储配额。"
     },
+    "frnd-requests": {
+      "label": "FRND 请求",
+      "description": "一个共享项目，每个成员都可以向其他成员提出请求。每个请求仅对相关人员可见。"
+    },
     "telegram": {
       "label": "Telegram",
       "description": "设置用户关联 Telegram 账户所用的机器人，以及项目未单独配置时发送通知的机器人。"

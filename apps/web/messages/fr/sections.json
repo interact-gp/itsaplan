@@ -39,6 +39,10 @@
       "label": "Stockage",
       "description": "Ce que les utilisateurs peuvent envoyer : la taille maximale d'un fichier, les types de pièces jointes acceptés, et l'espace de stockage alloué à chaque projet."
     },
+    "frnd-requests": {
+      "label": "Demandes FRND",
+      "description": "Un projet partagé où chaque membre peut demander quelque chose à un autre. Chaque demande reste privée aux personnes concernées."
+    },
     "telegram": {
       "label": "Telegram",
       "description": "Le bot auquel les utilisateurs relient leur compte Telegram, et celui qui envoie les notifications Telegram des projets sans bot dédié."

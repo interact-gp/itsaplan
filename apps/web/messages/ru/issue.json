@@ -13,6 +13,7 @@
     "assignee": "Исполнитель",
     "delegate": "Делегат",
     "watching": "Слежение",
+    "participants": "Участники",
     "type": "Тип",
     "labels": "Метки",
     "initiative": "Инициатива",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "убрал(а) исполнителя <v>{name}</v>",
     "assigneeChanged": "переназначил(а) на <v>{name}</v>",
     "assigneeSet": "назначил(а) на <v>{name}</v>",
+    "participantAdded": "добавил(а) <v>{name}</v>",
+    "participantRemoved": "убрал(а) <v>{name}</v>",
     "delegateRemoved": "убрал(а) делегата <v>{name}</v>",
     "delegateChanged": "переделегировал(а) на <v>{name}</v>",
     "delegateSet": "делегировал(а) <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Добавить {name} в наблюдатели",
     "remove": "Убрать {name} из наблюдателей",
     "watchingCount": "{count, plural, =0 {Никто не следит} one {# наблюдатель} few {# наблюдателя} many {# наблюдателей} other {# наблюдателя}}"
+  },
+  "participants": {
+    "manage": "Управлять участниками",
+    "search": "Поиск участников проекта…",
+    "empty": "Участники не найдены.",
+    "add": "Добавить {name}",
+    "remove": "Убрать {name}",
+    "none": "Никто не добавлен",
+    "audience": "Этот запрос видят только автор, исполнитель и добавленные здесь люди."
   },
   "effects": {
     "cleared": "Очищено",

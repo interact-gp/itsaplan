@@ -31,6 +31,7 @@ import {
   type MemberSource,
 } from '#modules/members/service';
 import { getStats, type StatsDto } from '#modules/analytics/service';
+import { isParticipantOnlyProject } from '#shared/issue-visibility';
 
 // The rank a person holds in a team.
 export type TeamRole = 'owner' | 'manager' | 'member';
@@ -617,9 +618,14 @@ export async function getTeamProject(
   const viewer = await getMemberContext(projectId, userId);
   if (!runsTeam(standing) && !viewer) return null;
 
+  // Counts across a participant-only project would describe requests the reader may
+  // not see, so it shows none.
+  const hidden = await isParticipantOnlyProject(projectId);
   const [activity, stats, source] = await Promise.all([
-    lastActivityAt(projectId),
-    getStats(projectId),
+    hidden ? null : lastActivityAt(projectId),
+    hidden
+      ? { open: 0, inProgress: 0, backlog: 0, overdue: 0, unassigned: 0, closedLast7d: 0 }
+      : getStats(projectId),
     getMembershipSource(projectId, userId),
   ]);
 

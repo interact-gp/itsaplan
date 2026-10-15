@@ -13,6 +13,7 @@
     "assignee": "Responsable",
     "delegate": "Délégué",
     "watching": "Suivi",
+    "participants": "Personnes",
     "type": "Type",
     "labels": "Étiquettes",
     "initiative": "Initiative",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "a retiré <v>{name}</v> de l'assignation",
     "assigneeChanged": "a réassigné à <v>{name}</v>",
     "assigneeSet": "a assigné à <v>{name}</v>",
+    "participantAdded": "a ajouté <v>{name}</v>",
+    "participantRemoved": "a retiré <v>{name}</v>",
     "delegateRemoved": "a retiré la délégation à <v>{name}</v>",
     "delegateChanged": "a redélégué à <v>{name}</v>",
     "delegateSet": "a délégué à <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Ajouter {name} aux abonnés",
     "remove": "Retirer {name} des abonnés",
     "watchingCount": "{count, plural, =0 {Aucun abonné} one {# abonné} other {# abonnés}}"
+  },
+  "participants": {
+    "manage": "Gérer les personnes",
+    "search": "Rechercher des membres du projet…",
+    "empty": "Aucun membre trouvé.",
+    "add": "Ajouter {name}",
+    "remove": "Retirer {name}",
+    "none": "Personne d’ajouté",
+    "audience": "Seuls le demandeur, la personne assignée et les personnes ajoutées ici voient cette demande."
   },
   "effects": {
     "cleared": "Effacé",

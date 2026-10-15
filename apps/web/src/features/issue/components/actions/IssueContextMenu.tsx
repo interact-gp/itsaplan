@@ -35,6 +35,7 @@ import { ApplyActionDialog, DeleteIssueDialog, matchedActions } from './IssueAct
 import { buildIssuePrompt } from '../../utils/issuePrompt';
 import { delegatableAgents } from '../../utils/delegates';
 import { useSession } from '@/lib/auth-client';
+import { managesRequest } from '../../utils/requestAccess';
 import { toDateStr } from '@/utils/dates';
 import { colorDot } from '@/components/common/fields/colorDot';
 import { PRIORITY_FIELDS } from '@/components/common/fields/priorityFields';
@@ -192,31 +193,33 @@ export default function IssueContextMenu({
                 </ContextMenuSubContent>
               </ContextMenuSub>
 
-              {members.length > 0 && (
-                <ContextMenuSub>
-                  <ContextMenuSubTrigger>
-                    <User />
-                    {t('assignee')}
-                  </ContextMenuSubTrigger>
-                  <ContextMenuSubContent className="w-56">
-                    <ContextMenuItem onSelect={() => patch({ assigneeUserId: null })}>
-                      <CircleDashed />
-                      <span className="flex-1">{t('noAssignee')}</span>
-                      <SelectedCheck selected={issue.assigneeUserId == null} />
-                    </ContextMenuItem>
-                    {members.map((a) => (
-                      <ContextMenuItem
-                        key={a.userId}
-                        onSelect={() => patch({ assigneeUserId: a.userId })}
-                      >
-                        <User />
-                        <span className="flex-1 truncate">{a.name}</span>
-                        <SelectedCheck selected={a.userId === issue.assigneeUserId} />
+              {members.length > 0 &&
+                (!project.project.participantOnly ||
+                  managesRequest(issue, session?.user.id ?? null)) && (
+                  <ContextMenuSub>
+                    <ContextMenuSubTrigger>
+                      <User />
+                      {t('assignee')}
+                    </ContextMenuSubTrigger>
+                    <ContextMenuSubContent className="w-56">
+                      <ContextMenuItem onSelect={() => patch({ assigneeUserId: null })}>
+                        <CircleDashed />
+                        <span className="flex-1">{t('noAssignee')}</span>
+                        <SelectedCheck selected={issue.assigneeUserId == null} />
                       </ContextMenuItem>
-                    ))}
-                  </ContextMenuSubContent>
-                </ContextMenuSub>
-              )}
+                      {members.map((a) => (
+                        <ContextMenuItem
+                          key={a.userId}
+                          onSelect={() => patch({ assigneeUserId: a.userId })}
+                        >
+                          <User />
+                          <span className="flex-1 truncate">{a.name}</span>
+                          <SelectedCheck selected={a.userId === issue.assigneeUserId} />
+                        </ContextMenuItem>
+                      ))}
+                    </ContextMenuSubContent>
+                  </ContextMenuSub>
+                )}
 
               {agents.length > 0 && (
                 <ContextMenuSub>

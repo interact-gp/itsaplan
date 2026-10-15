@@ -14,6 +14,7 @@ import { readRedactedSettings } from '#modules/notification-settings/service';
 import { getPreferencesForUsers } from '#modules/notification-preferences/service';
 import { getTelegramChatIds, hasUsableInstanceBot } from '#modules/telegram/service';
 import { escapeHtml } from '#shared/lib';
+import { isParticipantOnlyProject } from '#shared/issue-visibility';
 import type { NotificationType, NewNotificationRow } from './service';
 
 // Outbound notification delivery: turns the inbox notification rows produced by an
@@ -138,6 +139,10 @@ export async function enqueueOutbound(
 ): Promise<void> {
   if (notifications.length === 0) return;
   const projectId = notifications[0].projectId;
+  // A private request is announced only by Slack direct message, which checks access
+  // again when it is sent. Email and Telegram would go through the team's own provider,
+  // which an administrator who cannot see the request may configure.
+  if (await isParticipantOnlyProject(projectId)) return;
 
   const [projectRow] = await db
     .select({ key: project.key, name: project.name, teamId: project.teamId })

@@ -80,6 +80,8 @@ export const noteBoardRoutes = new Elysia({
     '/projects/:projectKey/note-boards',
     ({ project, user, query }) => listNoteBoards(project.id, requireUser(user).id, { q: query.q }),
     {
+      projectWide: true,
+
       permission: ['note_boards', 'read'],
       feature: 'notes',
       query: listNoteBoardsQuery,
@@ -97,6 +99,8 @@ export const noteBoardRoutes = new Elysia({
     '/projects/:projectKey/note-boards/access-candidates',
     async ({ project }) => listNoteBoardAccessCandidates(project.id),
     {
+      projectWide: true,
+
       permission: ['note_boards', 'edit'],
       feature: 'notes',
       response: { 200: NoteBoardAccessCandidateListResponse, ...accessErrors },
@@ -114,6 +118,8 @@ export const noteBoardRoutes = new Elysia({
       return loadAccessibleBoard(params.boardId, project.id, requireUser(user).id);
     },
     {
+      projectWide: true,
+
       permission: ['note_boards', 'read'],
       feature: 'notes',
       params: noteBoardParams,
@@ -141,6 +147,8 @@ export const noteBoardRoutes = new Elysia({
       });
     },
     {
+      projectWide: true,
+
       permission: ['note_boards', 'create'],
       feature: 'notes',
       body: createNoteBoardBody,
@@ -191,6 +199,8 @@ export const noteBoardRoutes = new Elysia({
       return board;
     },
     {
+      projectWide: true,
+
       permission: ['note_boards', 'edit'],
       feature: 'notes',
       params: noteBoardParams,
@@ -232,6 +242,8 @@ export const noteBoardRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['note_boards', 'delete'],
       feature: 'notes',
       params: noteBoardParams,

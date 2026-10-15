@@ -207,7 +207,7 @@ export default function IssueDetailContent({
         />
       )}
 
-      <IssueLinksPanel project={project} issue={issue} />
+      {!project.project.participantOnly && <IssueLinksPanel project={project} issue={issue} />}
     </>
   );
 

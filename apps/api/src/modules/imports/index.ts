@@ -8,6 +8,7 @@ import { requireUser } from '#shared/access';
 import { getProjectById } from '#modules/projects/service';
 import { previewTable, titleKeys, type ImportField } from './mapping';
 import { ConfirmResponse, ImportResponse, importIdParams } from './model';
+import { isParticipantOnlyProject } from '#shared/issue-visibility';
 import {
   cancelImport,
   confirmImport,
@@ -34,9 +35,12 @@ export const importRoutes = new Elysia({
   .use(authContext)
   .use(guards)
   .macro({
-    importFile: entityGuard('work_items', 'Import not found', (p) =>
-      getImportProjectId(p.importId),
-    ),
+    // Imports compare titles across the whole project, so a participant-only project
+    // has none.
+    importFile: entityGuard('work_items', 'Import not found', async (p) => {
+      const projectId = await getImportProjectId(p.importId);
+      return projectId != null && !(await isParticipantOnlyProject(projectId)) ? projectId : null;
+    }),
   })
 
   .get(

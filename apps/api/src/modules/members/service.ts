@@ -10,9 +10,10 @@ import {
   aiAgent,
   userPreference,
 } from '@repo/db';
-import { and, desc, eq, ilike, isNotNull, isNull, notExists, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm';
 import { iso } from '#shared/lib';
 import { DEFAULT_TIMEZONE } from '#modules/user-preferences/service';
+import { personalWorkspace } from '#modules/personal-pages/workspace';
 import {
   defaultMemberPermissions,
   fullPermissions,
@@ -195,6 +196,9 @@ export interface AssigneeCandidate {
 }
 
 export async function listAssigneeCandidates(projectId: number): Promise<AssigneeCandidate[]> {
+  // The system account owns the shared Personal Notes and FRND Requests projects but is
+  // nobody to assign or add.
+  const { systemUserId } = await personalWorkspace();
   const [memberRows, agentRows] = await Promise.all([
     db
       .select({
@@ -214,7 +218,13 @@ export async function listAssigneeCandidates(projectId: number): Promise<Assigne
       // keep the member candidates real people only. Same agent test as listMembers.
       .leftJoin(aiAgent, eq(aiAgent.userId, projectMember.userId))
       .leftJoin(teamRole, eq(teamRole.id, projectMember.roleId))
-      .where(and(eq(projectMember.projectId, projectId), isNull(aiAgent.id))),
+      .where(
+        and(
+          eq(projectMember.projectId, projectId),
+          isNull(aiAgent.id),
+          systemUserId ? ne(projectMember.userId, systemUserId) : undefined,
+        ),
+      ),
     db
       .select({
         userId: aiAgent.userId,

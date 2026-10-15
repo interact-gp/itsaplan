@@ -65,6 +65,10 @@ export function useActivityText() {
         return {
           line: rich(from ? 'assigneeChanged' : 'assigneeSet', { name: to }),
         };
+      case 'participant_added':
+        return { line: rich('participantAdded', { name: subject ?? '' }) };
+      case 'participant_removed':
+        return { line: rich('participantRemoved', { name: subject ?? '' }) };
       case 'delegate':
         if (!to) return { line: rich('delegateRemoved', { name: from ?? '' }) };
         return {

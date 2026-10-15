@@ -13,6 +13,7 @@
     "assignee": "Виконавець",
     "delegate": "Делегат",
     "watching": "Стеження",
+    "participants": "Учасники",
     "type": "Тип",
     "labels": "Мітки",
     "initiative": "Ініціатива",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "прибрав(-ла) виконавця <v>{name}</v>",
     "assigneeChanged": "переназначив(-ла) на <v>{name}</v>",
     "assigneeSet": "призначив(-ла) на <v>{name}</v>",
+    "participantAdded": "додав(ла) <v>{name}</v>",
+    "participantRemoved": "прибрав(ла) <v>{name}</v>",
     "delegateRemoved": "прибрав(-ла) делегата <v>{name}</v>",
     "delegateChanged": "переделегував(-ла) на <v>{name}</v>",
     "delegateSet": "делегував(-ла) <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Додати {name} до спостерігачів",
     "remove": "Прибрати {name} зі спостерігачів",
     "watchingCount": "{count, plural, =0 {Ніхто не стежить} one {# спостерігач} few {# спостерігачі} many {# спостерігачів} other {# спостерігача}}"
+  },
+  "participants": {
+    "manage": "Керувати учасниками",
+    "search": "Пошук учасників проєкту…",
+    "empty": "Учасників не знайдено.",
+    "add": "Додати {name}",
+    "remove": "Прибрати {name}",
+    "none": "Нікого не додано",
+    "audience": "Цей запит бачать лише автор, виконавець і додані тут люди."
   },
   "effects": {
     "cleared": "Очищено",

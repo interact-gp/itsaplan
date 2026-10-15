@@ -39,6 +39,10 @@
       "label": "Storage",
       "description": "How much people may upload: the size of a single file, the attachment types accepted, and the storage each project gets."
     },
+    "frnd-requests": {
+      "label": "FRND Requests",
+      "description": "A shared project where every member can ask another member for something. Each request stays private to the people in it."
+    },
     "telegram": {
       "label": "Telegram",
       "description": "The bot people connect their Telegram account to, and the one that delivers Telegram notifications for projects that set no bot of their own."

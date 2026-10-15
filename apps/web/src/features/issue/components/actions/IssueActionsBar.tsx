@@ -147,7 +147,7 @@ export default function IssueActionsBar({
         </TooltipTrigger>
         <TooltipContent>{copied ? t('copied') : t('copyPrompt')}</TooltipContent>
       </Tooltip>
-      {canEdit && (
+      {canEdit && !project.project.participantOnly && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

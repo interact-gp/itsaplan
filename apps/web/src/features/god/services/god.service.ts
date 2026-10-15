@@ -30,7 +30,9 @@ import {
   updateInstanceOidcSettings,
   getInstanceTelegramSettings,
   updateInstanceTelegramSettings,
+  getRequestDeskSettings,
   getSlackReminderSettings,
+  updateRequestDeskSettings,
   sendSlackReminderTest,
   updateSlackReminderSettings,
   getInstanceProjectDefaults,
@@ -227,6 +229,22 @@ export function useUpdateSlackReminderSettings() {
 
 export function useSendSlackReminderTest() {
   return useMutation({ mutationFn: () => sendSlackReminderTest() });
+}
+
+// Whether every member is enrolled in FRND Requests.
+export function useRequestDeskSettingsQuery() {
+  return useQuery({
+    queryKey: qk.requestDeskSettings,
+    queryFn: () => getRequestDeskSettings(),
+  });
+}
+
+export function useUpdateRequestDeskSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => updateRequestDeskSettings(enabled),
+    onSuccess: (data) => qc.setQueryData(qk.requestDeskSettings, data),
+  });
 }
 
 // What a new project starts with on this instance. Projects that already exist are

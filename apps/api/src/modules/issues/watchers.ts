@@ -2,6 +2,7 @@ import { aiAgent, db, issueWatcher, user, userPreference } from '@repo/db';
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { getMemberContext, type MemberContext } from '#modules/members/service';
 import { hasPermission } from '#shared/permissions';
+import { isIssueVisible } from '#shared/issue-visibility';
 
 // Who follows an issue. A watcher receives every notification the issue produces
 // (see modules/notifications/service.ts); the assignment and mention notifications are
@@ -45,7 +46,11 @@ export async function listIssueWatchers(
     )
     .orderBy(asc(user.name));
   const eligible = await Promise.all(
-    rows.map(async (row) => canReadWorkItems(await getMemberContext(projectId, row.userId))),
+    rows.map(
+      async (row) =>
+        canReadWorkItems(await getMemberContext(projectId, row.userId)) &&
+        (await isIssueVisible(issueId, row.userId)),
+    ),
   );
   return rows.filter((_, index) => eligible[index]);
 }
@@ -56,13 +61,21 @@ export async function watcherUserIds(projectId: number, issueId: number): Promis
 }
 
 // Watchers receive human notifications, so agent identities are excluded.
-export async function isEligibleIssueWatcher(projectId: number, userId: string): Promise<boolean> {
+export async function isEligibleIssueWatcher(
+  projectId: number,
+  issueId: number,
+  userId: string,
+): Promise<boolean> {
   const [person] = await db
     .select({ id: user.id })
     .from(user)
     .leftJoin(aiAgent, eq(aiAgent.userId, user.id))
     .where(and(eq(user.id, userId), eq(user.active, true), isNull(aiAgent.id)));
-  return !!person && canReadWorkItems(await getMemberContext(projectId, userId));
+  return (
+    !!person &&
+    canReadWorkItems(await getMemberContext(projectId, userId)) &&
+    (await isIssueVisible(issueId, userId))
+  );
 }
 
 // Subscribes or unsubscribes one member by hand. Both states are stored, so an
@@ -105,7 +118,11 @@ export async function autoWatchIssue(
     );
   if (rows.length === 0) return;
   const allowed = await Promise.all(
-    rows.map(async (row) => canReadWorkItems(await getMemberContext(projectId, row.userId))),
+    rows.map(
+      async (row) =>
+        canReadWorkItems(await getMemberContext(projectId, row.userId)) &&
+        (await isIssueVisible(issueId, row.userId)),
+    ),
   );
   const eligible = rows.filter((_, index) => allowed[index]);
   if (eligible.length === 0) return;

@@ -33,6 +33,8 @@ export interface Project {
   subtasksEnabled: boolean;
   checklistsEnabled: boolean;
   issueStatsEnabled: boolean;
+  // Each issue is visible only to its creator, its assignee and the people added to it.
+  participantOnly: boolean;
   // The sections this project may use at all. One missing here is not available to
   // the team: its flag above always reads false and the settings page does not offer
   // it. Everything is available on a self-hosted instance.

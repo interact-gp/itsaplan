@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { db, webhook, webhookDelivery } from '@repo/db';
+import { db, project, webhook, webhookDelivery } from '@repo/db';
 import { and, eq, sql } from 'drizzle-orm';
 import type { WebhookEventType } from './service';
 
@@ -54,10 +54,14 @@ export async function emitWebhookEvents(
   const matching = await db
     .select({ id: webhook.id })
     .from(webhook)
+    // A webhook payload carries the whole issue to an outside system, so a project
+    // that keeps issues to their participants sends none.
+    .innerJoin(project, eq(project.id, webhook.projectId))
     .where(
       and(
         eq(webhook.projectId, projectId),
         eq(webhook.isActive, true),
+        eq(project.participantOnly, false),
         // events is a jsonb array of event-type strings. @> tests membership.
         sql`${webhook.events} @> ${JSON.stringify([eventType])}::jsonb`,
       ),

@@ -288,6 +288,20 @@ export const updateSlackReminderSettings = (input: SlackReminderSettingsInput) =
 export const sendSlackReminderTest = () =>
   request<SlackReminderTestResult>('/god/slack-reminders/test', { method: 'POST' });
 
+// FRND Requests: whether every member is enrolled in the General Requests project.
+export interface RequestDeskSettings {
+  enabled: boolean;
+  projectId: number | null;
+}
+
+export const getRequestDeskSettings = () => request<RequestDeskSettings>('/god/frnd-requests');
+
+export const updateRequestDeskSettings = (enabled: boolean) =>
+  request<RequestDeskSettings>('/god/frnd-requests', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+
 export const getInstanceHotkeySettings = () => request<HotkeyOverrides>('/god/hotkey-settings');
 
 export const updateInstanceHotkeySettings = (combos: HotkeyOverrides) =>

@@ -39,6 +39,10 @@
       "label": "Penyimpanan",
       "description": "Batas unggahan pengguna: ukuran file tunggal, jenis lampiran yang diterima, dan ruang penyimpanan untuk setiap proyek."
     },
+    "frnd-requests": {
+      "label": "Permintaan FRND",
+      "description": "Proyek bersama tempat setiap anggota dapat meminta sesuatu kepada anggota lain. Setiap permintaan hanya terlihat oleh orang yang terlibat."
+    },
     "telegram": {
       "label": "Telegram",
       "description": "Bot yang dihubungkan pengguna ke akun Telegram mereka, dan bot yang mengirimkan notifikasi Telegram untuk proyek yang tidak menetapkan bot sendiri."

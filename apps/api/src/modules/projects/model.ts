@@ -78,6 +78,7 @@ export const ProjectResponse = t.Object({
   subtasksEnabled: t.Boolean(),
   checklistsEnabled: t.Boolean(),
   issueStatsEnabled: t.Boolean(),
+  participantOnly: t.Boolean(),
   pointsEstimateEnabled: t.Boolean(),
   timeEstimateEnabled: t.Boolean(),
   timeLoggingEnabled: t.Boolean(),

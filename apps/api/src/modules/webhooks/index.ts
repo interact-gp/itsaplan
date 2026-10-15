@@ -39,6 +39,8 @@ export const webhookRoutes = new Elysia({ name: 'webhooks', detail: { tags: ['We
       return listWebhooks(project.id);
     },
     {
+      projectWide: true,
+
       permission: ['webhooks', 'read'],
       response: { 200: t.Array(WebhookResponse), ...accessErrors },
       detail: { summary: "List a project's webhooks", ...mcpTool('list_webhooks') },
@@ -59,6 +61,8 @@ export const webhookRoutes = new Elysia({ name: 'webhooks', detail: { tags: ['We
     },
     {
       body: createWebhookBody,
+      projectWide: true,
+
       permission: ['webhooks', 'create'],
       response: { 201: WebhookResponse, ...commonErrors },
       detail: { summary: 'Create a webhook', ...mcpTool('create_webhook') },

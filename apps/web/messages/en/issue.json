@@ -13,6 +13,7 @@
     "assignee": "Assignee",
     "delegate": "Delegate",
     "watching": "Watching",
+    "participants": "People",
     "type": "Type",
     "labels": "Labels",
     "initiative": "Initiative",
@@ -279,6 +280,8 @@
     "assigneeRemoved": "removed assignee <v>{name}</v>",
     "assigneeChanged": "re-assigned to <v>{name}</v>",
     "assigneeSet": "assigned to <v>{name}</v>",
+    "participantAdded": "added <v>{name}</v>",
+    "participantRemoved": "removed <v>{name}</v>",
     "delegateRemoved": "removed delegate <v>{name}</v>",
     "delegateChanged": "re-delegated to <v>{name}</v>",
     "delegateSet": "delegated to <v>{name}</v>",
@@ -433,6 +436,15 @@
     "add": "Add {name} as a watcher",
     "remove": "Remove {name} from watchers",
     "watchingCount": "{count, plural, =0 {No watchers} one {# watcher} other {# watchers}}"
+  },
+  "participants": {
+    "manage": "Manage people",
+    "search": "Search project members…",
+    "empty": "No members found.",
+    "add": "Add {name}",
+    "remove": "Remove {name}",
+    "none": "Nobody added",
+    "audience": "Only the requester, the assignee and the people added here can see this request."
   },
   "effects": {
     "cleared": "Cleared",

@@ -41,6 +41,8 @@ export const gitSettingsRoutes = new Elysia({
       return { ...settings, secret: canEdit ? settings.secret : null };
     },
     {
+      projectWide: true,
+
       permission: ['integrations', 'read'],
       response: { 200: GitSettingsResponse, ...accessErrors },
       detail: {
@@ -54,6 +56,8 @@ export const gitSettingsRoutes = new Elysia({
     '/projects/:projectKey/settings/git',
     ({ project, body }) => updateGitSettings(project.id, body),
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       body: updateGitSettingsBody,
       response: { 200: GitSettingsResponse, ...commonErrors },
@@ -72,6 +76,8 @@ export const gitSettingsRoutes = new Elysia({
       return settings;
     },
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       response: { 200: GitSettingsResponse, ...accessErrors },
       detail: {
@@ -85,6 +91,8 @@ export const gitSettingsRoutes = new Elysia({
     '/projects/:projectKey/settings/git/connections',
     ({ project }) => listGitProviderConnections(project.id),
     {
+      projectWide: true,
+
       permission: ['integrations', 'read'],
       response: { 200: GitProviderConnectionListResponse, ...accessErrors },
       detail: {
@@ -102,6 +110,8 @@ export const gitSettingsRoutes = new Elysia({
       return connection;
     },
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       body: createGitProviderConnectionBody,
       response: { 201: GitProviderConnectionResponse, ...commonErrors, ...errors(502) },
@@ -119,6 +129,8 @@ export const gitSettingsRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       params: gitProviderConnectionParams,
       response: { 204: t.Void(), ...commonErrors, ...errors(502) },
@@ -139,6 +151,8 @@ export const gitSettingsRoutes = new Elysia({
         query.search ?? '',
       ),
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       params: gitProviderConnectionParams,
       query: availableRepositoriesQuery,
@@ -155,6 +169,8 @@ export const gitSettingsRoutes = new Elysia({
     ({ project, params, body }) =>
       connectRepositories(project.id, params.connectionId, body.externalIds),
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       params: gitProviderConnectionParams,
       body: connectRepositoriesBody,
@@ -173,6 +189,8 @@ export const gitSettingsRoutes = new Elysia({
       return noContent();
     },
     {
+      projectWide: true,
+
       permission: ['integrations', 'edit'],
       params: gitManagedRepositoryParams,
       response: { 204: t.Void(), ...commonErrors, ...errors(502) },

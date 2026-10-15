@@ -211,6 +211,15 @@
     "quotaMb": "Almacenamiento por proyecto (MB)",
     "quotaNote": "Cuando un proyecto alcanza la cuota, las subidas nuevas se rechazan hasta que alguien elimine adjuntos."
   },
+  "frndRequests": {
+    "enrolment": "Inscribir a todos los miembros",
+    "enrolmentHint": "Añade a todos los que pueden usar la aplicación al proyecto General Requests, ahora y cuando se unan. Actívalo cuando se haya comprobado la privacidad de las solicitudes.",
+    "on": "Activado: todos los miembros están en General Requests.",
+    "off": "Desactivado: nadie se inscribe automáticamente.",
+    "privacy": "Cada solicitud solo la ven quien la pidió, la persona asignada y las personas añadidas, también para los administradores.",
+    "enabled": "Solicitudes FRND activadas",
+    "disabled": "Solicitudes FRND desactivadas"
+  },
   "telegram": {
     "saved": "Los ajustes de Telegram se han guardado",
     "bot": "Bot",
