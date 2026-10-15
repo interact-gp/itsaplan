@@ -7,6 +7,7 @@ import Avatar from '@/components/common/Avatar';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { managesRequest } from '../../utils/requestAccess';
 import {
   Command,
   CommandEmpty,
@@ -34,9 +35,7 @@ export default function IssueParticipants({
   const currentUserId = session?.user.id ?? null;
   const { data: participants = [] } = useIssueParticipantsQuery(issue.id, true);
   const setParticipant = useSetIssueParticipant(issue.id);
-  const canManage =
-    currentUserId !== null &&
-    (currentUserId === issue.createdByUserId || currentUserId === issue.assigneeUserId);
+  const canManage = managesRequest(issue, currentUserId);
   const addedIds = new Set(participants.map((p) => p.userId));
   // The creator and the assignee see the request already.
   const candidates = members.filter(

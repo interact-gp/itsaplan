@@ -1334,6 +1334,26 @@ export async function bulkUpdateIssues(
     const incoming = await countEnteringColumn(valid, patch.columnId);
     if (incoming > 0) await assertWipLimit(patch.columnId, incoming);
   }
+  // The same holds for reassigning requests: one the actor may not reassign refuses
+  // the whole batch before any of it is written.
+  if (
+    patch.assigneeUserId !== undefined &&
+    valid.length > 0 &&
+    (await isParticipantOnly(projectId))
+  ) {
+    const rows = await db
+      .select({ createdByUserId: issue.createdByUserId, assigneeUserId: issue.assigneeUserId })
+      .from(issue)
+      .where(inArray(issue.id, valid));
+    if (
+      rows.some(
+        (row) =>
+          row.assigneeUserId !== patch.assigneeUserId &&
+          (!actorUserId || !managesAccess(row, actorUserId)),
+      )
+    )
+      throw new HttpError(403, 'Only the requester or the assignee can reassign a request');
+  }
   for (const id of valid) await updateIssue(id, patch, actorUserId);
   return valid.length;
 }

@@ -80,13 +80,16 @@ export default function SettingsDeleteStateDialog({
                 </SelectContent>
               </Select>
             )}
-            <Label>
-              <Checkbox
-                checked={action === 'delete'}
-                onCheckedChange={(v) => v === true && setAction('delete')}
-              />
-              <span className="text-destructive">{t('deleteIssues')}</span>
-            </Label>
+            {/* Requests are never deleted with their column; the API refuses it. */}
+            {!project.project.participantOnly && (
+              <Label>
+                <Checkbox
+                  checked={action === 'delete'}
+                  onCheckedChange={(v) => v === true && setAction('delete')}
+                />
+                <span className="text-destructive">{t('deleteIssues')}</span>
+              </Label>
+            )}
           </div>
         </div>
       )}

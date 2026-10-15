@@ -244,6 +244,24 @@ describe('participant-only issues', () => {
       expect(await sees(asker, request.id)).toBe(200);
     });
 
+    it('refuses a bulk reassignment as a whole when it holds a request the actor may not reassign', async () => {
+      const { asker, added, other, columnId } = await world();
+      const create = (person: TestUser, assigneeUserId: string) =>
+        authedApi(person.cookie)
+          .projects({ projectKey: 'REQ' })
+          .issues.post({ columnId, title: 'Bulk', assigneeUserId });
+      const own = (await create(added, added.userId)).data!;
+      const joined = (await create(asker, asker.userId)).data!;
+      await db.insert(issueParticipant).values({ issueId: joined.id, userId: added.userId });
+
+      const bulk = await authedApi(added.cookie)
+        .projects({ projectKey: 'REQ' })
+        .issues.bulk.patch({ ids: [own.id, joined.id], patch: { assigneeUserId: other.userId } });
+      expect(bulk.status).toBe(403);
+      const rows = await db.select().from(issue).where(eq(issue.title, 'Bulk'));
+      expect(rows.map((r) => r.assigneeUserId).sort()).toEqual([added.userId, asker.userId].sort());
+    });
+
     it('does not reach or subscribe someone mentioned who is not in the request', async () => {
       const { asker, other, request } = await world();
       const handle = other.username;

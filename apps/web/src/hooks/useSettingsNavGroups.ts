@@ -1,3 +1,4 @@
+import { useContext } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { type LucideIcon } from 'lucide-react';
@@ -8,6 +9,7 @@ import {
   GENERAL_SECTIONS,
   type SettingsSection,
 } from '@/utils/settingsSections';
+import { ShellCtx } from '@/context/shellContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSettingsSectionText } from '@/hooks/useSectionLabels';
 import type { ProjectDetail } from '@/lib/api/endpoints/projects';
@@ -17,6 +19,8 @@ import type { ProjectDetail } from '@/lib/api/endpoints/projects';
 // from the section config and the viewer's permissions, and reports the first
 // reachable destination so the main sidebar's "Project settings" entry knows
 // where to point.
+
+const PROJECT_WIDE_SECTIONS = new Set(['webhooks', 'git']);
 
 export type SettingsNavItem = {
   key: string;
@@ -45,11 +49,15 @@ export function useSettingsNavGroups(
   const sectionText = useSettingsSectionText();
   const pathname = usePathname();
   const { can } = usePermissions(project);
+  const ctx = useContext(ShellCtx);
+  // A private request project has no webhooks or Git integration: the API refuses both.
+  const participantOnly = (project ?? ctx?.project)?.project.participantOnly === true;
 
   // The readable sections of one group as nav items.
   const toItems = (sections: SettingsSection[]): SettingsNavItem[] =>
     sections
       .filter((s) => can(s.resource, 'read'))
+      .filter((s) => !participantOnly || !PROJECT_WIDE_SECTIONS.has(s.slug))
       .map((s) => ({
         key: s.slug,
         href: projectKey ? settingsPath(projectKey, s.slug) : '#',

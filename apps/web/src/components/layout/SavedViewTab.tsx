@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import ViewTabChrome from '@/components/layout/ViewTabChrome';
 import ViewTabLabel from '@/components/layout/ViewTabLabel';
 import ShareDialog from '@/components/common/share/ShareDialog';
+import { ShellCtx } from '@/context/shellContext';
 
 // A saved view tab. Sortable (drag to reorder); when active it shows a "…" menu
 // with Favorite / Share / Edit / Delete.
@@ -40,6 +41,9 @@ export default function SavedViewTab({
   const tCommon = useTranslations('common');
   const [menuOpen, setMenuOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // A view of private requests is never shared publicly; the API refuses it.
+  const shell = useContext(ShellCtx);
+  const canShare = canEdit && shell?.project?.project.participantOnly !== true;
   const qc = useQueryClient();
   const setFavorite = useSetViewFavorite(projectKey);
 
@@ -100,7 +104,7 @@ export default function SavedViewTab({
               />
               {view.favorite ? t('unfavorite') : t('favorite')}
             </button>
-            {canEdit && (
+            {canShare && (
               <button
                 type="button"
                 onClick={() => {
