@@ -11,6 +11,14 @@ export const organizationGroups = {
   member: '/access/frnd-prd/member',
 };
 
+// Whether the identity-provider sync reported in the last two minutes. Until it does,
+// nobody has access.
+export async function organizationSyncFresh() {
+  const lastSync = (await getSetting<number>('organization.lastSync')) ?? 0;
+  const age = Date.now() - lastSync;
+  return Number.isFinite(age) && age >= 0 && age < 120_000;
+}
+
 export async function organizationAccess(userId: string) {
   const [person] = await db
     .select({ active: user.active, agentId: aiAgent.id })
@@ -29,9 +37,7 @@ export async function organizationAccess(userId: string) {
         inArray(scimGroup.displayName, Object.values(organizationGroups)),
       ),
     );
-  const lastSync = (await getSetting<number>('organization.lastSync')) ?? 0;
-  const age = Date.now() - lastSync;
-  const fresh = Number.isFinite(age) && age >= 0 && age < 120_000;
+  const fresh = await organizationSyncFresh();
   return {
     enabled: fresh && groups.length > 0,
     admin: fresh && groups.some((g) => g.name === organizationGroups.admin),

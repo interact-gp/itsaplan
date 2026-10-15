@@ -7,6 +7,7 @@ import {
   scimGroup,
   scimGroupMember,
   setSetting,
+  teamRole,
   user,
 } from '@repo/db';
 import { eq } from 'drizzle-orm';
@@ -66,6 +67,17 @@ describe('personal page provisioning', () => {
     expect(docs.data).toHaveLength(1);
     expect(docs.data![0]).toMatchObject({ id: page.documentId, title: 'My To-do', personal: true });
     expect((await myPage(rahul)).data!.documentId).not.toBe(page.documentId);
+  });
+
+  it('recreates its role when an administrator deleted it, and keeps provisioning', async () => {
+    await signUpTestUser();
+    await signUpTestUser({ name: 'Priya' });
+    await provisionPersonalPages();
+    const { roleId } = await personalWorkspace();
+    await db.delete(teamRole).where(eq(teamRole.id, roleId!));
+    const rahul = await signUpTestUser({ name: 'Rahul' });
+    await provisionPersonalPages();
+    expect((await myPage(rahul)).status).toBe(200);
   });
 
   it('lets the owner keep a checklist in the page', async () => {

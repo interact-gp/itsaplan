@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { db, slackReminderDelivery, user } from '@repo/db';
+import { db, setSetting, slackReminderDelivery, user } from '@repo/db';
 import { eq } from 'drizzle-orm';
 import { authedApi, type Api } from '#tests/helpers/app';
 import { signUpTestUser, type TestUser } from '#tests/helpers/auth';
@@ -280,6 +280,47 @@ describe('Slack reminders', () => {
     const rows = await db.select().from(slackReminderDelivery);
     expect(rows.every((r) => r.status === 'pending')).toBe(true);
     expect(rows.every((r) => r.nextAttemptAt.getTime() - Date.now() > 20_000)).toBe(true);
+  });
+
+  it('cuts a long to-do item so the digest stays within Slack limits', async () => {
+    const { member } = await world();
+    await writeTodos(member, [['x'.repeat(5000), false]]);
+    await sendTestReminder(member.userId);
+    const [dm] = dms();
+    expect(dm!.args.text!.length).toBeLessThan(1000);
+    expect(dm!.args.text).toContain(`${'x'.repeat(199)}…`);
+  });
+
+  it('skips a scheduled time missed by more than an hour and keeps the schedule', async () => {
+    const { asAdmin, member } = await world();
+    await writeTodos(member, [['Review PR', false]]);
+    const set = await asAdmin.god['slack-reminders'].put({
+      enabled: true,
+      cron: '0 9 * * *',
+      timezone: 'UTC',
+    });
+    const due = new Date(set.data!.nextRunAt!);
+    await scheduleReminders(new Date(due.getTime() + 2 * 3_600_000));
+    expect(await db.select().from(slackReminderDelivery)).toHaveLength(0);
+    const after = (await asAdmin.god['slack-reminders'].get()).data!;
+    expect(new Date(after.nextRunAt!).getTime()).toBeGreaterThan(due.getTime());
+  });
+
+  it('tries again later when the access sync is behind, instead of skipping the member', async () => {
+    const { member } = await world();
+    await writeTodos(member, [['Review PR', false]]);
+    process.env.ITSAPLAN_MANAGED_ACCESS = 'true';
+    try {
+      await setSetting('organization.lastSync', Date.now() - 10 * 60_000);
+      expect(await sendTestReminder(member.userId)).toEqual({
+        status: 'pending',
+        outcome: 'sync_stale',
+      });
+      await setSetting('organization.lastSync', Date.now());
+      expect((await sendTestReminder(member.userId)).outcome).toBe('no_access');
+    } finally {
+      delete process.env.ITSAPLAN_MANAGED_ACCESS;
+    }
   });
 
   it('sends nothing queued by a schedule that was turned off before sending', async () => {

@@ -6,6 +6,7 @@ import {
   hasApplicationAccess,
   issue,
   managedAccess,
+  organizationSyncFresh,
   project,
   projectColumn,
   projectDocument,
@@ -39,6 +40,11 @@ const BATCH = 20;
 // How long a claimed row stays out of other claims while it is being sent.
 const LEASE = sql`interval '2 minutes'`;
 const LIST_LIMIT = 10;
+// Longer to-do items are cut, so the digest stays within Slack's message size.
+const ITEM_LENGTH = 200;
+// A scheduled time missed by more than this, while the api was down, is skipped rather
+// than sent at whatever hour the api comes back.
+const LATE_LIMIT_MS = 3_600_000;
 const MIN_INTERVAL_SECONDS = 3600;
 
 export interface ReminderSettings {
@@ -91,11 +97,14 @@ export async function scheduleReminders(now = new Date()): Promise<void> {
   const settings = await getReminderSettings();
   if (!settings.enabled || !settings.nextRunAt || now < new Date(settings.nextRunAt)) return;
   const occurrence = new Date(settings.nextRunAt);
-  const recipients = await db
-    .select({ id: user.id })
-    .from(user)
-    .leftJoin(aiAgent, eq(aiAgent.userId, user.id))
-    .where(and(or(isNull(user.active), ne(user.active, false)), isNull(aiAgent.id)));
+  const recipients =
+    now.getTime() - occurrence.getTime() > LATE_LIMIT_MS
+      ? []
+      : await db
+          .select({ id: user.id })
+          .from(user)
+          .leftJoin(aiAgent, eq(aiAgent.userId, user.id))
+          .where(and(or(isNull(user.active), ne(user.active, false)), isNull(aiAgent.id)));
   if (recipients.length) {
     await db
       .insert(slackReminderDelivery)
@@ -211,8 +220,11 @@ async function sendDigest(userId: string, trigger: string): Promise<Outcome> {
     .leftJoin(userPreference, eq(userPreference.userId, user.id))
     .where(eq(user.id, userId));
   if (!member || member.active === false) return { status: 'skipped', outcome: 'inactive' };
-  if (managedAccess() && !(await hasApplicationAccess(userId)))
+  if (managedAccess() && !(await hasApplicationAccess(userId))) {
+    // While the identity-provider sync is behind, nobody has access; try again later.
+    if (!(await organizationSyncFresh())) throw new Error('sync_stale');
     return { status: 'skipped', outcome: 'no_access' };
+  }
   if (member.optedIn === false) return { status: 'skipped', outcome: 'opted_out' };
 
   const [page] = await db
@@ -257,7 +269,11 @@ async function sendDigest(userId: string, trigger: string): Promise<Outcome> {
     const url = page ? appUrl(`/project/${page.projectKey}/docs/${page.id}`) : undefined;
     lines.push('', `${link(url, 'My To-do')} (${todos.length})`);
     lines.push(
-      ...todos.slice(0, LIST_LIMIT).map((t) => `• ${escapeSlack(t)}`),
+      ...todos
+        .slice(0, LIST_LIMIT)
+        .map(
+          (t) => `• ${escapeSlack(t.length > ITEM_LENGTH ? `${t.slice(0, ITEM_LENGTH - 1)}…` : t)}`,
+        ),
       ...more(todos.length),
     );
   }
@@ -309,7 +325,12 @@ async function deliver(row: Delivery): Promise<{ status: string; outcome: string
     await finish(row, result.status, result.outcome);
     return result;
   } catch (error) {
-    const code = error instanceof SlackApiError ? error.code : 'error';
+    const code =
+      error instanceof SlackApiError
+        ? error.code
+        : error instanceof Error && error.message === 'sync_stale'
+          ? 'sync_stale'
+          : 'error';
     console.error(`[slack-reminders] delivery ${row.id} attempt ${row.attempts} failed: ${code}`);
     if (row.attempts >= MAX_ATTEMPTS) {
       await finish(row, 'failed', code);

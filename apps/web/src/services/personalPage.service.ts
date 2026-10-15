@@ -19,5 +19,7 @@ export function usePersonalPageQuery() {
     },
     enabled: Boolean(session),
     staleTime: 5 * 60_000,
+    // A new member's page is created within about 30 seconds; look again until it is.
+    refetchInterval: (query) => (query.state.data === null ? 30_000 : false),
   });
 }

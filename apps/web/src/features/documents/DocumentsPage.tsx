@@ -66,7 +66,10 @@ export default function DocumentsPage() {
   const canReadWorkItems = can('work_items', 'read');
   const canLinkWorkItems = canEdit && can('work_items', 'edit');
 
+  // Every member's page is in one shared project, so its marker moves on anyone's edit;
+  // only the owner edits a personal page, so it is not refreshed live.
   useLiveRefresh({
+    enabled: documentQuery.data?.personal !== true,
     scope: project ? revScope.documents(project.project.id) : null,
     targets: [
       qk.documentListsForProject(projectKey),

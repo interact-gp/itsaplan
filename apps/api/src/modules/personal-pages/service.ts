@@ -34,31 +34,37 @@ const LOCK = 731926105;
 type Ready = Required<PersonalWorkspace>;
 
 // Members may read and edit pages but not create them, so the shared project holds
-// nothing but the personal pages provisioning writes.
+// nothing but the personal pages provisioning writes. Delete lets the owner remove a
+// file from their page; the page itself cannot be archived, so it cannot be deleted.
 function memberPermissions() {
   const permissions = emptyPermissions();
   permissions.documents.read = true;
   permissions.documents.edit = true;
+  permissions.documents.delete = true;
   return permissions;
 }
 
 // Creates what is missing of the workspace, one step at a time, and records each step
 // as it completes, so a run that fails halfway resumes where it stopped.
-// A recorded team or project that no longer exists is created again, and with a new
-// team goes a new role and project.
+// A recorded team, role or project that no longer exists is created again, and with a
+// new team goes a new role and project.
 async function ensureWorkspace(): Promise<Ready> {
   const saved = await personalWorkspace();
   const record = async (patch: PersonalWorkspace) => {
     Object.assign(saved, patch);
     await setSetting(WORKSPACE_SETTING, saved);
   };
-  const exists = async (table: typeof team | typeof project, id: number | undefined) =>
+  const exists = async (
+    table: typeof team | typeof teamRole | typeof project,
+    id: number | undefined,
+  ) =>
     id !== undefined &&
     (await db.select({ id: table.id }).from(table).where(eq(table.id, id))).length > 0;
   if (!(await exists(team, saved.teamId))) {
     await record({ teamId: undefined, roleId: undefined, projectId: undefined });
-  } else if (!(await exists(project, saved.projectId))) {
-    await record({ projectId: undefined });
+  } else {
+    if (!(await exists(teamRole, saved.roleId))) await record({ roleId: undefined });
+    if (!(await exists(project, saved.projectId))) await record({ projectId: undefined });
   }
 
   if (!saved.systemUserId) {
