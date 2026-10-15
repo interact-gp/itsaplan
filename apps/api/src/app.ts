@@ -17,6 +17,7 @@ import { planner } from './planner';
 import { mountMcp } from './mcp/mount';
 import { setMcpApp } from './mcp/app-ref';
 import { gitWebhookRoutes } from './modules/git/webhook';
+import { slackRoutes } from './modules/slack';
 import { scimRoutes } from './modules/scim';
 import { syncOidcGroupsAfterCallback } from './modules/scim/oidc-sync';
 import { normalizeOpenApiResponse } from './openapi';
@@ -130,6 +131,10 @@ export const app = new Elysia()
             name: 'Git',
             description:
               'Repository integration: the inbound pull request webhook and its per-project settings',
+          },
+          {
+            name: 'Slack',
+            description: 'Slack bot: @mentions that add tasks to projects as the sender',
           },
           { name: 'Agent Schedules', description: 'Recurring tasks for internal agents' },
           { name: 'Dashboards', description: 'Saved analytics dashboards' },
@@ -305,6 +310,8 @@ export const app = new Elysia()
   })
   // Inbound repository webhook receiver (authenticated by its per-project secret).
   .use(gitWebhookRoutes)
+  // Slack Events API receiver (authenticated by the Slack signing secret).
+  .use(slackRoutes)
   // SCIM 2.0 provisioning (authenticated by the instance SCIM bearer token). Mounted
   // here rather than under the planner: the planner's session guard would answer 401
   // before the bearer check runs, and its error handler emits a body SCIM does not

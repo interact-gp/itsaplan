@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'bun:test';
-import { selectTools } from '../../jev';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { rankTools, selectTools } from '../../jev';
 import { routeTools, mcpTool } from '../../generate';
 import { Elysia } from 'elysia';
 
@@ -46,5 +46,29 @@ describe('Jev discovery decisions', () => {
     }
     expect(selectTools({}, 'weather', tools).tools).toEqual([]);
     expect(selectTools({}, 'list issues', []).tools).toEqual([]);
+  });
+
+  it('names why Jev gave no decision', async () => {
+    const saved = process.env.OPENROUTER_API_KEY;
+    const fetchSpy = spyOn(globalThis, 'fetch');
+    try {
+      delete process.env.OPENROUTER_API_KEY;
+      expect((await rankTools('list issues', tools)).reason).toBe('Jev is not configured');
+      process.env.OPENROUTER_API_KEY = 'test-key';
+      fetchSpy.mockResolvedValueOnce(new Response('down', { status: 503 }));
+      expect((await rankTools('list issues', tools)).reason).toBe('Jev is unavailable');
+      fetchSpy.mockResolvedValueOnce(Response.json({ answers: null }));
+      expect((await rankTools('list issues', tools)).reason).toBe(
+        'Jev returned an invalid decision',
+      );
+      fetchSpy.mockRejectedValueOnce(new Error('timeout'));
+      expect((await rankTools('list issues', tools)).reason).toBe(
+        'Jev timed out or is unavailable',
+      );
+    } finally {
+      fetchSpy.mockRestore();
+      if (saved === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = saved;
+    }
   });
 });

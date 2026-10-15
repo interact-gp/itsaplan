@@ -5,6 +5,7 @@ import { guards, entityGuard, assertMcpAllowed, requiresPermission } from '#shar
 import { authContext } from '#shared/auth-context';
 import { assertPermission, assertProjectOwner, requireUser } from '#shared/access';
 import { HttpError } from '#shared/lib';
+import { getSlackEvent } from '#shared/mcp-request';
 import { accessErrors, commonErrors, errors } from '#shared/responses';
 import { deleteObject } from '#shared/s3';
 import {
@@ -262,9 +263,9 @@ export const issueRoutes = new Elysia({ name: 'issues', detail: { tags: ['Issues
   })
   .post(
     '/projects/:projectKey/issues',
-    async ({ project, body, user, set }) => {
+    async ({ project, body, user, set, request }) => {
       set.status = 201;
-      return createIssue(project, body, requireUser(user).id);
+      return createIssue(project, body, requireUser(user).id, getSlackEvent(request));
     },
     {
       body: createIssueBody,

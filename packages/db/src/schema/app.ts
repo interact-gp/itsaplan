@@ -897,6 +897,107 @@ export const userTelegramAccount = pgTable(
   ],
 );
 
+// The Slack user a product account acts as in the instance Slack workspace. Created
+// by the Slack bot when the address on the Slack profile matches a verified account
+// email, never from an address written in a message.
+export const userSlackAccount = pgTable(
+  'user_slack_account',
+  {
+    slackTeamId: text('slack_team_id').notNull(),
+    slackUserId: text('slack_user_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.slackTeamId, t.slackUserId] }),
+    index('user_slack_account_user_idx').on(t.userId),
+  ],
+);
+
+// One row per Slack event the bot accepted, keyed by Slack's event_id: the insert is
+// what makes a retried delivery a no-op. It also records who asked for what and the
+// outcome. A row in status 'clarify' holds a request waiting for the sender to name
+// its target in the same thread.
+export const slackEvent = pgTable(
+  'slack_event',
+  {
+    eventId: text('event_id').primaryKey(),
+    slackTeamId: text('slack_team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    messageTs: text('message_ts').notNull(),
+    threadTs: text('thread_ts').notNull(),
+    slackUserId: text('slack_user_id').notNull(),
+    // The bot user the event addressed, so the mention can be read again on a retry.
+    botUserId: text('bot_user_id'),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    // The message as Slack sent it, stored before the event is acknowledged, then the
+    // request it became (with an earlier question's text when it answered one).
+    request: text('request').notNull().default(''),
+    status: text('status').notNull().default('received'),
+    // The task made for the event, linked in the transaction that creates it.
+    issueId: integer('issue_id').references(() => issue.id, { onDelete: 'set null' }),
+    projectId: integer('project_id').references(() => project.id, { onDelete: 'set null' }),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('slack_event_thread_idx').on(t.channelId, t.threadTs),
+    index('slack_event_retry_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} IN ('received', 'failed')`),
+    check(
+      'slack_event_status_check',
+      sql`${t.status} IN ('received', 'clarify', 'done', 'refused', 'failed')`,
+    ),
+  ],
+);
+
+// A message the bot owes Slack for a task it created: the confirmation in the thread
+// (or to the sender only, when the channel may not see the project) and the direct
+// message to the assignee. Each is sent and retried on its own, so a failed reply
+// neither blocks the other nor makes the task again. The text is built at send time,
+// and the assignee's access is checked then too.
+export const slackBotMessage = pgTable(
+  'slack_bot_message',
+  {
+    id: serial('id').primaryKey(),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => slackEvent.eventId, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    issueId: integer('issue_id')
+      .notNull()
+      .references(() => issue.id, { onDelete: 'cascade' }),
+    // Who receives it: the sender for a private confirmation, the assignee for the DM.
+    slackUserId: text('slack_user_id').notNull(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    // A skip reason or the last Slack error code. Never the message.
+    outcome: text('outcome'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('slack_bot_message_event_kind_uq').on(t.eventId, t.kind),
+    index('slack_bot_message_due_idx')
+      .on(t.nextAttemptAt)
+      .where(sql`${t.status} = 'pending'`),
+    check(
+      'slack_bot_message_kind_check',
+      sql`${t.kind} IN ('thread_reply', 'private_reply', 'assignee')`,
+    ),
+    check(
+      'slack_bot_message_status_check',
+      sql`${t.status} IN ('pending', 'sent', 'skipped', 'failed')`,
+    ),
+  ],
+);
+
 // Outbox for outbound notification delivery. One row per (recipient, channel,
 // message) to send for an issue event: an email or a Telegram message to one member.
 // Rows are enqueued when inbox notifications are created (see

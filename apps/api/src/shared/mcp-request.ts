@@ -8,6 +8,10 @@
 export const MCP_LOOPBACK_HEADER = 'x-mcp-loopback';
 
 const oauthTokens = new WeakMap<Request, string>();
+// A user id attached by in-process code that authenticated the user itself (the
+// Slack bot). Only code that builds the Request can set it, so it cannot arrive over
+// the network.
+const actingUsers = new WeakMap<Request, string>();
 
 // True when the request came from an MCP tool dispatch.
 export function isMcpRequest(headers: Headers): boolean {
@@ -20,4 +24,24 @@ export function setMcpOAuthToken(request: Request, token: string): void {
 
 export function getMcpOAuthToken(request: Request): string | undefined {
   return oauthTokens.get(request);
+}
+
+export function setActingUser(request: Request, userId: string): void {
+  actingUsers.set(request, userId);
+}
+
+export function getActingUser(request: Request): string | undefined {
+  return actingUsers.get(request);
+}
+
+// The Slack event a task is created for, attached by the Slack bot. The task and its
+// link to the event are saved in one transaction, so a retried event finds its task.
+const slackEvents = new WeakMap<Request, string>();
+
+export function setSlackEvent(request: Request, eventId: string): void {
+  slackEvents.set(request, eventId);
+}
+
+export function getSlackEvent(request: Request): string | undefined {
+  return slackEvents.get(request);
 }
