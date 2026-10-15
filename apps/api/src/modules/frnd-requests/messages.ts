@@ -11,6 +11,7 @@ import {
 } from '@repo/db';
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { isIssueVisible } from '#shared/issue-visibility';
+import { canReadIssues, noAccessMessage } from '#modules/slack/access';
 import { escapeSlack, postDirect, SlackApiError } from '#modules/slack/client';
 import { slackUserFor } from '#modules/slack-reminders/service';
 
@@ -85,14 +86,11 @@ async function sendMessage(message: Message): Promise<Outcome> {
     return { status: 'skipped', outcome: 'no_access' };
   if (member.optedIn === false) return { status: 'skipped', outcome: 'opted_out' };
 
-  // Someone removed is told so; everyone else only while they can still see it.
-  const visible = await isIssueVisible(message.issueId, member.id);
-  if (message.kind === 'removed' ? visible : !visible)
-    return { status: 'skipped', outcome: 'no_longer_applies' };
-
   const [request] = await db
     .select({
       key: project.key,
+      projectId: project.id,
+      projectName: project.name,
       number: issue.sequenceNumber,
       title: issue.title,
       state: projectColumn.name,
@@ -103,8 +101,25 @@ async function sendMessage(message: Message): Promise<Outcome> {
     .where(eq(issue.id, message.issueId));
   if (!request) return { status: 'skipped', outcome: 'deleted' };
 
+  // Someone removed is told so; everyone else only while they can still see it.
+  const visible = await isIssueVisible(message.issueId, member.id);
+  if (message.kind === 'removed' ? visible : !visible)
+    return { status: 'skipped', outcome: 'no_longer_applies' };
+  // The request also needs the project: an assignee without it is told who can give it,
+  // and nobody else is told anything.
+  const readable =
+    message.kind === 'removed' || (await canReadIssues(request.projectId, member.id));
+  if (!readable && message.kind !== 'assigned') return { status: 'skipped', outcome: 'no_access' };
+
   const slackUserId = await slackUserFor(member);
   if (!slackUserId) return { status: 'skipped', outcome: 'no_slack_account' };
+  if (!readable) {
+    await postDirect(
+      slackUserId,
+      await noAccessMessage(member.id, request.title, request.projectId, request.projectName),
+    );
+    return { status: 'sent', outcome: 'sent_no_access' };
+  }
 
   const ref = `${request.key}-${request.number}`;
   const url = appUrl(`/project/${request.key}/issue/${request.number}`);

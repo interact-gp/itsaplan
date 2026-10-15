@@ -1,6 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { db, slackRequestMessage, user } from '@repo/db';
-import { eq } from 'drizzle-orm';
+import {
+  db,
+  emptyPermissions,
+  organizationGroups,
+  projectMember,
+  scimGroup,
+  scimGroupMember,
+  setSetting,
+  slackRequestMessage,
+  teamRole,
+  user,
+} from '@repo/db';
+import { and, eq } from 'drizzle-orm';
 import { authedApi } from '#tests/helpers/app';
 import { signUpTestUser, type TestUser } from '#tests/helpers/auth';
 import { resetDb } from '#tests/helpers/db';
@@ -55,6 +66,27 @@ async function onSlack(person: TestUser, slackId: string) {
   await db.update(user).set({ emailVerified: true }).where(eq(user.id, person.userId));
 }
 
+// Turns on Keycloak-managed access and puts each person in an organization group, the
+// way the identity-provider sync does.
+async function managed(people: [TestUser, 'admin' | 'member'][]) {
+  process.env.ITSAPLAN_MANAGED_ACCESS = 'true';
+  for (const [person, rank] of people) {
+    const [group] = await db
+      .insert(scimGroup)
+      .values({ displayName: organizationGroups[rank] })
+      .onConflictDoUpdate({
+        target: scimGroup.displayName,
+        set: { displayName: organizationGroups[rank] },
+      })
+      .returning();
+    await db
+      .insert(scimGroupMember)
+      .values({ groupId: group!.id, userId: person.userId })
+      .onConflictDoNothing();
+  }
+  await setSetting('organization.lastSync', Date.now());
+}
+
 const to = (slackId: string) => posts.filter((p) => p.channel === slackId).map((p) => p.text);
 
 describe('request messages', () => {
@@ -62,6 +94,7 @@ describe('request messages', () => {
     SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
     SLACK_TEAM_ID: process.env.SLACK_TEAM_ID,
     APP_URL: process.env.APP_URL,
+    ITSAPLAN_MANAGED_ACCESS: process.env.ITSAPLAN_MANAGED_ACCESS,
   };
 
   beforeEach(async () => {
@@ -70,6 +103,7 @@ describe('request messages', () => {
       SLACK_BOT_TOKEN: 'xoxb-test',
       SLACK_TEAM_ID: WORKSPACE,
       APP_URL: 'https://plan.example',
+      ITSAPLAN_MANAGED_ACCESS: 'false',
     });
     posts = [];
     slackIds = {};
@@ -148,6 +182,52 @@ describe('request messages', () => {
     await people({ userId: ankit.userId }).delete();
     await drainRequestMessages();
     expect(to('UANKIT')).toEqual(['You no longer have access to request REQ-1.']);
+  });
+
+  it('tells an assignee without project access who can give it, and nothing more', async () => {
+    const { god, priya, rahul, ankit, request } = await world();
+    // Nobody owns the requests project, so an organization admin is named.
+    await managed([
+      [god, 'admin'],
+      [priya, 'member'],
+      [rahul, 'member'],
+      [ankit, 'member'],
+    ]);
+    await db
+      .delete(projectMember)
+      .where(
+        and(eq(projectMember.projectId, request.projectId), eq(projectMember.userId, rahul.userId)),
+      );
+    await drainRequestMessages();
+    expect(to('URAHUL')).toEqual([
+      'You were assigned "Review my PR #42" in General Requests, but you don\'t currently have access. Contact Owner to request access.',
+    ]);
+    const read = await authedApi(rahul.cookie).issues({ issueId: request.id }).get();
+    expect(read.status).toBeGreaterThanOrEqual(403);
+  });
+
+  it('tells nobody else about a request in a project they cannot read', async () => {
+    const { priya, ankit, request } = await world();
+    await authedApi(priya.cookie)
+      .issues({ issueId: request.id })
+      .participants({ userId: ankit.userId })
+      .put();
+    const [{ roleId }] = await db
+      .select({ roleId: projectMember.roleId })
+      .from(projectMember)
+      .where(
+        and(eq(projectMember.projectId, request.projectId), eq(projectMember.userId, ankit.userId)),
+      );
+    await db
+      .update(teamRole)
+      .set({ permissions: emptyPermissions() })
+      .where(eq(teamRole.id, roleId!));
+    await drainRequestMessages();
+    expect(to('UANKIT')).toEqual([]);
+    expect(to('URAHUL')[0]).toContain("you don't currently have access");
+    expect(
+      (await authedApi(ankit.cookie).issues({ issueId: request.id }).get()).status,
+    ).toBeGreaterThanOrEqual(403);
   });
 
   it('respects the opt-out and sends each message once', async () => {
