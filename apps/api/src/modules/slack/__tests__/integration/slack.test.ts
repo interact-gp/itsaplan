@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
   db,
   organizationGroups,
+  projectColumn,
   scimGroup,
   scimGroupMember,
   setSetting,
@@ -441,6 +442,59 @@ describe('Slack bot', () => {
         expect(text).not.toContain('<https://evil.example');
         expect(text).toContain('&lt;!channel&gt; and &lt;https://evil.example|docs&gt; &amp; more');
       }
+    });
+
+    it('takes a task about a project as a task', async () => {
+      const { asOwner } = await world();
+      await deliver(mention('UOWNER', 'create a task in MKT to add project filters to the board'));
+      expect(await issues(asOwner)).toHaveLength(1);
+    });
+
+    it('asks for the request when the mention has no text', async () => {
+      const { asOwner } = await world();
+      jev = { tool: 'create_issue' };
+      const first = mention('UOWNER', '');
+      await deliver(first);
+      expect(replies('chat.postEphemeral')[0]!.text).toContain('Write the request');
+      await deliver(mention('UOWNER', 'MKT', { threadTs: first.event.ts }));
+      expect(await issues(asOwner)).toHaveLength(0);
+    });
+
+    it('treats a mention in an old question thread as a new request', async () => {
+      const { asOwner } = await world();
+      jev = { tool: 'create_issue' };
+      const first = mention('UOWNER', 'create a task to fix push notifications');
+      await deliver(first);
+      await db.update(slackEvent).set({ createdAt: new Date(Date.now() - 25 * 3_600_000) });
+      await deliver(
+        mention('UOWNER', 'create a task in OPS to rotate keys', { threadTs: first.event.ts }),
+      );
+      expect(titleRequests.at(-1)).toBe('create a task in OPS to rotate keys');
+      expect(await issues(asOwner, 'OPS')).toHaveLength(1);
+    });
+
+    it('writes the request without Slack markup into the task', async () => {
+      const { asOwner } = await world();
+      delete process.env.OPENROUTER_API_KEY;
+      await deliver(
+        mention('UOWNER', 'create a task in MKT to fix A &amp; B, see <https://x.example|docs>'),
+      );
+      const [created] = await issues(asOwner);
+      expect(created!.title).toBe(
+        'create a task in MKT to fix A & B, see docs (https://x.example)',
+      );
+    });
+
+    it('tells the sender once when the task cannot be created, and does not try again', async () => {
+      const { asOwner } = await world();
+      const mkt = (await asOwner.projects({ projectKey: 'MKT' }).get()).data!;
+      await db.delete(projectColumn).where(eq(projectColumn.projectId, mkt.project.id));
+      await deliver(mention('UOWNER', 'create a task in MKT to fix login'));
+      await retrySlackWork();
+      const told = replies('chat.postEphemeral').filter((m) =>
+        m.text!.includes('could not create'),
+      );
+      expect(told).toHaveLength(1);
     });
 
     it('keeps a question pending when posting it to Slack fails', async () => {

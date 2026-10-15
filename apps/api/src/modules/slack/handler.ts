@@ -45,7 +45,7 @@ const running = new Set<Promise<void>>();
 export function handleInBackground(mention: SlackMention, botUserId: string | undefined) {
   const work: Promise<void> = handleMention(mention, botUserId)
     .catch(async (err) => {
-      console.error('[slack]', err);
+      console.error(`[slack] event ${mention.eventId} failed: ${errorCode(err)}`);
       await failSlackEvent(mention.eventId).catch(() => {});
     })
     .finally(() => running.delete(work));
@@ -76,11 +76,19 @@ export async function retrySlackWork(): Promise<void> {
       text: row.request,
     };
     await handleMention(mention, row.botUserId ?? undefined).catch(async (err) => {
-      console.error('[slack]', err);
+      console.error(`[slack] event ${row.eventId} failed: ${errorCode(err)}`);
       await failSlackEvent(row.eventId);
     });
   }
   await sendBotMessages();
+}
+
+// A database error carries its query parameters, which hold the message text and email
+// addresses, so only its code is logged.
+function errorCode(err: unknown) {
+  const cause = (err as { cause?: { code?: unknown } }).cause;
+  if (typeof cause?.code === 'string') return cause.code;
+  return err instanceof Error ? err.name : 'error';
 }
 
 function routeError(text: string) {
@@ -123,6 +131,13 @@ export async function handleMention(mention: SlackMention, botUserId: string | u
   let request = text;
   const finish = (status: SlackEventStatus, extra: Outcome = {}) =>
     finishSlackEvent(mention.eventId, { status, userId, request, ...extra });
+  if (!text) {
+    await finish('refused');
+    await tell(
+      'Write the request after mentioning me, for example "create a task in PROJECT to …".',
+    );
+    return;
+  }
 
   const [tool] = await authorizedTools(
     routeTools(getMcpApp()).filter((t) => t.name === ACTION),
@@ -198,7 +213,7 @@ async function createIssue(
   const project = await getProjectByKey(target.key);
   const columnId = project ? await defaultColumnId(project.id) : null;
   if (!project || !columnId) {
-    await finish('failed');
+    await finish('refused');
     await tell(`I could not create the task: ${target.key} has no board column.`);
     return;
   }
@@ -248,7 +263,7 @@ async function createIssue(
       { viaMcpEndpoint: true },
     );
     if (result.isError) {
-      await finish('failed');
+      await finish('refused');
       await tell(`I could not create the task: ${routeError(result.text)}.`);
       return;
     }

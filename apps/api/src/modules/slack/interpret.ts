@@ -63,9 +63,13 @@ export function bareAnswer(text: string, projects: ProjectOption[]) {
 }
 
 // The bot only adds tasks to existing projects. A request for a new project is
-// answered with that instead of being read as a task.
+// answered with that instead of being read as a task. One that asks for a task about a
+// project ("create a task to add project filters") is a task.
 export function asksForProject(request: string) {
-  return /\b(new|create|make|start|add)\s+(a\s+|an\s+)?(new\s+)?project\b/i.test(request);
+  return (
+    /\b(new|create|make|start|add)\s+(a\s+|an\s+)?(new\s+)?project\b/i.test(request) &&
+    !/\b(task|issue|ticket|bug)s?\b/i.test(request)
+  );
 }
 
 // Works out which project the task goes in, choosing only among the projects the caller
@@ -136,11 +140,22 @@ async function extract<T>(schema: z.ZodType<T>, instructions: string, request: s
   }
 }
 
-// The request without Slack's mention markup, for a title when the model is not
-// available.
+// The request as the person wrote it, without Slack's markup: mentions are dropped,
+// links, channels and special mentions become their text, and &amp; &lt; &gt; are
+// decoded. Used for the description, and for a title when the model is not available.
 export function plainRequest(request: string) {
   return request
     .replace(/<@[A-Z0-9]+(\|[^>]*)?>/g, '')
+    .replace(/<#[A-Z0-9]+\|([^>]*)>/g, '#$1')
+    .replace(/<!subteam\^[A-Z0-9]+\|([^>]*)>/g, '$1')
+    .replace(/<!([^>|]+)(?:\|[^>]*)?>/g, '@$1')
+    .replace(/<([^>|]+)(?:\|([^>]*))?>/g, (_, url: string, label?: string) => {
+      const target = url.replace(/^mailto:/, '');
+      return label && label !== target ? `${label} (${target})` : target;
+    })
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim();
 }

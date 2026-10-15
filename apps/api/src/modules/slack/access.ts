@@ -1,14 +1,16 @@
 import { activeUser } from '#shared/auth-context';
+import { HttpError } from '#shared/lib';
 import { getMemberContext } from '#modules/members/service';
 import { hasPermission } from '#shared/permissions';
 
 // Whether the account may use the app now: it exists, is active and has application
-// access.
+// access. Any other error is thrown, so the event is tried again.
 export async function usable(userId: string): Promise<boolean> {
   try {
     return Boolean(await activeUser(userId));
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof HttpError) return false;
+    throw error;
   }
 }
 

@@ -148,13 +148,15 @@ export async function failSlackEvent(eventId: string) {
     .where(and(eq(slackEvent.eventId, eventId), eq(slackEvent.status, 'received')));
 }
 
-// How long a question asked in the channel itself waits for an answer posted in the
-// channel. An answer in the thread of the request has no limit.
+// How long a question waits for its answer: one asked in the channel itself for an
+// answer posted in the channel, and one asked in a thread for an answer in that thread.
+// A later mention is a new request.
 const CHANNEL_ANSWER_MINUTES = 10;
+const THREAD_ANSWER_HOURS = 24;
 
-// The request this sender left waiting for an answer: in this thread, or, for a message
-// posted in the channel itself, the latest one asked in the channel in the last few
-// minutes.
+// The request this sender left waiting for an answer: in this thread in the last day,
+// or, for a message posted in the channel itself, the latest one asked in the channel in
+// the last few minutes.
 export async function findPendingRequest(
   mention: SlackMention,
 ): Promise<{ eventId: string; request: string } | null> {
@@ -168,7 +170,10 @@ export async function findPendingRequest(
         eq(slackEvent.slackUserId, mention.slackUserId),
         eq(slackEvent.status, 'clarify'),
         inThread
-          ? eq(slackEvent.threadTs, mention.threadTs)
+          ? and(
+              eq(slackEvent.threadTs, mention.threadTs),
+              gt(slackEvent.createdAt, sql`now() - make_interval(hours => ${THREAD_ANSWER_HOURS})`),
+            )
           : and(
               eq(slackEvent.threadTs, slackEvent.messageTs),
               gt(
