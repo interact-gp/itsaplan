@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
   db,
+  issue,
   organizationGroups,
   projectColumn,
   scimGroup,
@@ -16,7 +17,8 @@ import { app, authedApi, type Api } from '#tests/helpers/app';
 import { signUpTestUser, type TestUser } from '#tests/helpers/auth';
 import { resetDb } from '#tests/helpers/db';
 import { createRole, teamIdOf } from '#tests/helpers/roles';
-import { retrySlackWork, slackWorkSettled } from '../../handler';
+import { handleMention, retrySlackWork, slackWorkSettled } from '../../handler';
+import * as slackService from '../../service';
 
 // The Slack bot: a signed @mention becomes a task or project created as the Slack
 // user who sent it, through the same route and permission checks as the web app.
@@ -699,6 +701,74 @@ describe('Slack bot', () => {
       expect(dm!.status).toBe('skipped');
     });
 
+    // Queues the assignee's message with Slack refusing it, so it is sent on a retry.
+    async function queuedAssignment(asOwner: Api) {
+      failingChannels.add('UMEMBER');
+      await deliver(
+        mention('UOWNER', 'create a task in MKT to fix push notifications and assign <@UMEMBER>'),
+      );
+      const [created] = await issues(asOwner);
+      failingChannels.clear();
+      await dueNow();
+      return created!;
+    }
+
+    function directTo(slackUserId: string) {
+      return replies('chat.postMessage').filter((m) => m.channel === slackUserId);
+    }
+
+    it('tells an assignee removed from the project who can give access, and nothing more', async () => {
+      const { asOwner, member } = await world();
+      const created = await queuedAssignment(asOwner);
+      await asOwner.projects({ projectKey: 'MKT' }).members({ userId: member.userId }).delete();
+      await retrySlackWork();
+      const [dm] = directTo('UMEMBER');
+      expect(dm!.text).toBe(
+        'You were assigned "Fix push notifications" in Marketing, but you don\'t currently have access. Contact <@UOWNER> to request access.',
+      );
+      expect(dm!.text).not.toContain('MKT-');
+      const asMember = authedApi(member.cookie);
+      const read = await asMember.issues({ issueId: created.id }).get();
+      expect(read.status).toBeGreaterThanOrEqual(403);
+    });
+
+    it('tells an assignee whose role no longer reads tasks who can give access', async () => {
+      const { asOwner, member } = await world();
+      await queuedAssignment(asOwner);
+      const role = await createRole(asOwner, 'MKT', {
+        name: 'No read',
+        permissions: { work_items: { read: false } },
+      });
+      await asOwner
+        .projects({ projectKey: 'MKT' })
+        .members({ userId: member.userId })
+        .patch({ role: 'member', roleId: role.data!.id });
+      await retrySlackWork();
+      expect(directTo('UMEMBER')[0]!.text).toContain('Contact <@UOWNER> to request access.');
+    });
+
+    it('names an owner who can still use the app, never a deactivated one', async () => {
+      const { asOwner, owner, member, outsider } = await world();
+      await join(asOwner, 'MKT', outsider);
+      await asOwner
+        .projects({ projectKey: 'MKT' })
+        .members({ userId: outsider.userId })
+        .patch({ role: 'owner' });
+      await queuedAssignment(asOwner);
+      await asOwner.projects({ projectKey: 'MKT' }).members({ userId: member.userId }).delete();
+      await db.update(user).set({ active: false }).where(eq(user.id, owner.userId));
+      await retrySlackWork();
+      expect(directTo('UMEMBER')[0]!.text).toContain('Contact Outsider to request access.');
+    });
+
+    it('sends nothing to an assignee who lost application access', async () => {
+      const { asOwner, member } = await world();
+      await queuedAssignment(asOwner);
+      await db.update(user).set({ active: false }).where(eq(user.id, member.userId));
+      await retrySlackWork();
+      expect(directTo('UMEMBER')).toEqual([]);
+    });
+
     it('keeps a request Slack sent while lookups failed, and creates it once later', async () => {
       const { asOwner } = await world();
       failing.add('users.info');
@@ -718,24 +788,52 @@ describe('Slack bot', () => {
       expect(await issues(asOwner)).toHaveLength(1);
     });
 
-    it('recovers an interrupted request without creating the task twice', async () => {
+    it('recovers an interrupted request once, even after its description was edited', async () => {
       const { asOwner } = await world();
-      await deliver(
-        mention('UMEMBER', 'create a task in MKT to fix push notifications', {
-          eventId: 'EvCut',
-        }),
+      const event = mention('UMEMBER', 'create a task in MKT to fix push notifications', {
+        eventId: 'EvCut',
+      });
+      // The process stops after creating the task, before the event is finished.
+      const stop = spyOn(slackService, 'finishSlackEvent').mockRejectedValueOnce(
+        new Error('stopped'),
       );
-      expect(await issues(asOwner)).toHaveLength(1);
-      // As if the process stopped after creating the task, before recording it.
-      await db
-        .update(slackEvent)
-        .set({ status: 'received', issueId: null, updatedAt: new Date(Date.now() - 10 * 60_000) })
-        .where(eq(slackEvent.eventId, 'EvCut'));
+      await deliver(event);
+      stop.mockRestore();
+      const [created] = await issues(asOwner);
+      expect(created).toBeDefined();
+      await dueNow();
+      await db.update(issue).set({ description: 'Rewritten' }).where(eq(issue.id, created!.id));
+      await deliver(event);
       await retrySlackWork();
       expect(await issues(asOwner)).toHaveLength(1);
       const [row] = await db.select().from(slackEvent).where(eq(slackEvent.eventId, 'EvCut'));
       expect(row!.status).toBe('done');
-      expect(row!.issueId).not.toBeNull();
+      expect(row!.issueId).toBe(created!.id);
+    });
+
+    it('creates one task when two attempts at one event run at the same time', async () => {
+      const { asOwner } = await world();
+      const event = mention('UMEMBER', 'create a task in MKT to fix push notifications');
+      const work = {
+        eventId: event.event_id,
+        slackTeamId: WORKSPACE,
+        channelId: 'C1',
+        messageTs: event.event.ts,
+        threadTs: event.event.ts,
+        slackUserId: 'UMEMBER',
+        text: event.event.text,
+      };
+      await slackService.claimSlackEvent(work, BOT);
+      await Promise.all([handleMention(work, BOT), handleMention(work, BOT)]);
+      const created = await issues(asOwner);
+      expect(created).toHaveLength(1);
+      const [row] = await db
+        .select()
+        .from(slackEvent)
+        .where(eq(slackEvent.eventId, event.event_id));
+      expect(row!.status).toBe('done');
+      expect(row!.issueId).toBe(created[0]!.id);
+      expect(replies('chat.postEphemeral').filter((m) => m.text.includes('could not'))).toEqual([]);
     });
 
     it('sends the assignee message even when the thread reply fails, and retries the reply alone', async () => {

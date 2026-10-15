@@ -936,9 +936,7 @@ export const slackEvent = pgTable(
     // request it became (with an earlier question's text when it answered one).
     request: text('request').notNull().default(''),
     status: text('status').notNull().default('received'),
-    // The description the task is created with. Set before the create call, so a
-    // retry after an interruption finds the task it made instead of making another.
-    issueDescription: text('issue_description'),
+    // The task made for the event, linked in the transaction that creates it.
     issueId: integer('issue_id').references(() => issue.id, { onDelete: 'set null' }),
     projectId: integer('project_id').references(() => project.id, { onDelete: 'set null' }),
     attempts: integer('attempts').notNull().default(0),

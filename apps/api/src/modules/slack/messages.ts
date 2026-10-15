@@ -1,7 +1,7 @@
 import { db, issue, project, slackBotMessage, slackEvent } from '@repo/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { escapeSlack, postDirect, postInThread, postPrivately } from './client';
-import { canReadIssues } from './access';
+import { canReadIssues, noAccessMessage, usable } from './access';
 
 // The replies the bot owes for a task it created: the confirmation (in the thread, or
 // to the sender only) and the assignee's direct message. Each row is sent on its own
@@ -38,6 +38,7 @@ async function sendMessage(message: Message): Promise<string> {
     .select({
       key: project.key,
       projectId: project.id,
+      projectName: project.name,
       number: issue.sequenceNumber,
       title: issue.title,
       assigneeUserId: issue.assigneeUserId,
@@ -64,9 +65,17 @@ async function sendMessage(message: Message): Promise<string> {
     const thread = row.threadTs === row.messageTs ? undefined : row.threadTs;
     await postPrivately(row.channelId, thread, message.slackUserId, `Created ${label}: ${shown}`);
   } else {
-    if (row.archivedAt || row.assigneeUserId !== message.userId) return 'no_longer_assigned';
-    if (!message.userId || !(await canReadIssues(row.projectId, message.userId)))
-      return 'no_access';
+    if (row.archivedAt || !message.userId || row.assigneeUserId !== message.userId)
+      return 'no_longer_assigned';
+    if (!(await usable(message.userId))) return 'no_access';
+    // Someone who lost access to the project since is told who can give it back.
+    if (!(await canReadIssues(row.projectId, message.userId))) {
+      await postDirect(
+        message.slackUserId,
+        await noAccessMessage(message.userId, row.title, row.projectId, row.projectName),
+      );
+      return 'sent_no_access';
+    }
     await postDirect(
       message.slackUserId,
       `<@${row.senderSlackId}> assigned you ${label}: ${shown}`,
@@ -82,7 +91,7 @@ async function deliver(message: Message): Promise<void> {
   let outcome: string;
   try {
     outcome = await sendMessage(message);
-    status = outcome === 'sent' ? 'sent' : 'skipped';
+    status = outcome.startsWith('sent') ? 'sent' : 'skipped';
   } catch (error) {
     outcome = error instanceof Error ? error.message.slice(0, 200) : 'error';
     console.error(`[slack] message ${message.id} attempt ${message.attempts} failed`);

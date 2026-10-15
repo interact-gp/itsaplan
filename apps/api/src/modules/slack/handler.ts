@@ -17,12 +17,11 @@ import {
 import {
   claimPendingRequest,
   claimRetry,
+  createdIssueId,
   defaultColumnId,
   failSlackEvent,
   findPendingRequest,
   finishSlackEvent,
-  planIssue,
-  plannedIssueId,
   resolveSlackUser,
   saveRequest,
   type SlackEventStatus,
@@ -242,12 +241,10 @@ async function createIssue(
     assigneeUserId = id;
   }
 
-  // A retry after an interruption finds the task the first run made, by the
-  // description recorded just before it was created, instead of making another.
-  const description = `Created from a Slack request:\n\n> ${plainRequest(request)}`;
-  let issueId = await plannedIssueId(mention.eventId);
+  // A retry after an interruption, or a second attempt running at the same time, finds
+  // the task linked to the event instead of making another.
+  let issueId = await createdIssueId(mention.eventId);
   if (issueId === null) {
-    await planIssue(mention.eventId, project.id, description);
     const title = await issueTitle(request);
     const result = await dispatchTool(
       getMcpApp(),
@@ -256,18 +253,20 @@ async function createIssue(
         projectKey: target.key,
         columnId,
         title,
-        description,
+        description: `Created from a Slack request:\n\n> ${plainRequest(request)}`,
         ...(assigneeUserId ? { assigneeUserId } : {}),
       },
-      { kind: 'user', userId },
+      { kind: 'user', userId, slackEventId: mention.eventId },
       { viaMcpEndpoint: true },
     );
-    if (result.isError) {
+    issueId = result.isError
+      ? await createdIssueId(mention.eventId)
+      : (JSON.parse(result.text) as { id: number }).id;
+    if (issueId === null) {
       await finish('refused');
       await tell(`I could not create the task: ${routeError(result.text)}.`);
       return;
     }
-    issueId = (JSON.parse(result.text) as { id: number }).id;
   }
   await finish('done', { issueId, projectId: project.id });
 

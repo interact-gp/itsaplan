@@ -1,5 +1,5 @@
-import { db, issue, projectColumn, slackEvent, user, userSlackAccount } from '@repo/db';
-import { and, asc, desc, eq, gt, gte, sql } from 'drizzle-orm';
+import { db, projectColumn, slackEvent, user, userSlackAccount } from '@repo/db';
+import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
 import { slackProfile } from './client';
 
 export interface SlackMention {
@@ -91,31 +91,13 @@ export async function saveRequest(eventId: string, request: string) {
     .where(eq(slackEvent.eventId, eventId));
 }
 
-// Recorded before the task is created: a retry after an interruption looks for a task
-// with this description in this project, created after the event, before making one.
-export async function planIssue(eventId: string, projectId: number, description: string) {
-  await db
-    .update(slackEvent)
-    .set({ projectId, issueDescription: description, updatedAt: sql`now()` })
-    .where(eq(slackEvent.eventId, eventId));
-}
-
-export async function plannedIssueId(eventId: string): Promise<number | null> {
+// The task created for this event: it is linked in the transaction that creates it.
+export async function createdIssueId(eventId: string): Promise<number | null> {
   const [row] = await db
-    .select({ id: issue.id })
+    .select({ issueId: slackEvent.issueId })
     .from(slackEvent)
-    .innerJoin(
-      issue,
-      and(
-        eq(issue.projectId, slackEvent.projectId),
-        eq(issue.description, slackEvent.issueDescription),
-        gte(issue.createdAt, slackEvent.createdAt),
-      ),
-    )
-    .where(eq(slackEvent.eventId, eventId))
-    .orderBy(asc(issue.id))
-    .limit(1);
-  return row?.id ?? null;
+    .where(eq(slackEvent.eventId, eventId));
+  return row?.issueId ?? null;
 }
 
 export async function finishSlackEvent(

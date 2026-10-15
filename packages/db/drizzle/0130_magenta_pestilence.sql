@@ -15,7 +15,6 @@ CREATE TABLE "slack_bot_message" (
 );
 --> statement-breakpoint
 ALTER TABLE "slack_event" ADD COLUMN "bot_user_id" text;--> statement-breakpoint
-ALTER TABLE "slack_event" ADD COLUMN "issue_description" text;--> statement-breakpoint
 ALTER TABLE "slack_event" ADD COLUMN "attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "slack_event" ADD COLUMN "next_attempt_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
 ALTER TABLE "slack_event" ADD COLUMN "updated_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint

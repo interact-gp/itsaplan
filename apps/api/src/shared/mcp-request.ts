@@ -33,3 +33,15 @@ export function setActingUser(request: Request, userId: string): void {
 export function getActingUser(request: Request): string | undefined {
   return actingUsers.get(request);
 }
+
+// The Slack event a task is created for, attached by the Slack bot. The task and its
+// link to the event are saved in one transaction, so a retried event finds its task.
+const slackEvents = new WeakMap<Request, string>();
+
+export function setSlackEvent(request: Request, eventId: string): void {
+  slackEvents.set(request, eventId);
+}
+
+export function getSlackEvent(request: Request): string | undefined {
+  return slackEvents.get(request);
+}

@@ -1,6 +1,11 @@
 import type { McpApp } from './types';
 import type { McpRouteTool } from './generate';
-import { MCP_LOOPBACK_HEADER, setActingUser, setMcpOAuthToken } from '../shared/mcp-request';
+import {
+  MCP_LOOPBACK_HEADER,
+  setActingUser,
+  setMcpOAuthToken,
+  setSlackEvent,
+} from '../shared/mcp-request';
 import type { McpCredential } from './credential';
 import { structuredResult, type StructuredResult } from './result';
 
@@ -62,7 +67,10 @@ export async function dispatchTool(
     body,
   });
   if (credential.kind === 'oauth') setMcpOAuthToken(request, credential.accessToken);
-  if (credential.kind === 'user') setActingUser(request, credential.userId);
+  if (credential.kind === 'user') {
+    setActingUser(request, credential.userId);
+    if (credential.slackEventId) setSlackEvent(request, credential.slackEventId);
+  }
   const response = await app.handle(request);
   const text = await response.text();
   return {

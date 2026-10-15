@@ -9109,12 +9109,6 @@
           "notNull": true,
           "default": "'received'"
         },
-        "issue_description": {
-          "name": "issue_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "issue_id": {
           "name": "issue_id",
           "type": "integer",

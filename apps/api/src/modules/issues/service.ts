@@ -14,6 +14,7 @@ import {
   customFieldOption,
   initiative,
   cycle,
+  slackEvent,
 } from '@repo/db';
 import {
   and,
@@ -831,11 +832,13 @@ function assertDateOrder(startDate?: string | null, dueDate?: string | null) {
 
 // Atomic per-project sequence number (the "-42" in "MKT-42"): the UPDATE takes a
 // row lock on project, so concurrent createIssue calls for the same project never
-// hand out the same number.
+// hand out the same number. An issue made for a Slack event is linked to it in the
+// same transaction, and only the first one is: a second create for the event fails.
 export async function createIssue(
   project: ProjectRow,
   input: NewIssueInput,
   actorUserId?: string | null,
+  slackEventId?: string,
 ): Promise<IssueRow> {
   await assertAssignments(project.id, input);
   await assertInitiative(project.id, input.initiativeId);
@@ -883,6 +886,14 @@ export async function createIssue(
         position: Number(posRow.pos),
       })
       .returning({ id: issue.id, createdAt: issue.createdAt });
+    if (slackEventId) {
+      const linked = await tx
+        .update(slackEvent)
+        .set({ issueId: row.id, projectId: project.id })
+        .where(and(eq(slackEvent.eventId, slackEventId), isNull(slackEvent.issueId)))
+        .returning({ eventId: slackEvent.eventId });
+      if (!linked.length) throw new HttpError(409, 'This Slack request already created a task');
+    }
     return row;
   });
 
