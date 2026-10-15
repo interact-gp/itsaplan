@@ -220,6 +220,21 @@
     "botTokenHint": "保存时会通过 Telegram 验证令牌，错误令牌会立即被拒绝。",
     "resolvedHint": "根据令牌解析。用户关联账户时会看到此机器人。"
   },
+  "slackReminders": {
+    "saved": "提醒计划已保存",
+    "schedule": "计划",
+    "scheduleHint": "每个人都会收到一条 Slack 私信，列出其“我的待办”中未勾选的事项和分配给他们的未完成工作。每个人都可以在偏好设置中关闭。",
+    "slackMissing": "此服务器尚未配置 Slack 机器人。请先设置 SLACK_BOT_TOKEN 和 SLACK_TEAM_ID。",
+    "cron": "Cron 计划",
+    "cronHint": "五个字段：分钟、小时、日、月、星期。最多每小时一次。",
+    "timezone": "时区",
+    "nextRun": "下次运行：{when}",
+    "off": "提醒已关闭。不会按计划发送任何消息。",
+    "privacy": "每条消息只发送到该用户自己的 Slack 私信。Slack 会按工作区的保留政策保存。",
+    "sendTest": "给我发送测试",
+    "testSent": "测试已发送到你的 Slack 私信",
+    "testNotSent": "未发送任何内容：{outcome}"
+  },
   "email": {
     "saved": "邮件服务商已保存",
     "provider": "邮件服务商",

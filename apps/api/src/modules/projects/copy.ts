@@ -467,6 +467,7 @@ export async function copyProject(
         .where(
           and(
             eq(projectDocument.projectId, sourceProjectId),
+            eq(projectDocument.personal, false),
             or(eq(projectDocument.isPrivate, false), eq(projectDocument.ownerUserId, ownerId)),
           ),
         )

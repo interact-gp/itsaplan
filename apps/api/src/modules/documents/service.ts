@@ -60,6 +60,7 @@ export interface DocumentSummaryRow {
   fullWidth: boolean;
   isPrivate: boolean;
   isLocked: boolean;
+  personal: boolean;
   isFavorite: boolean;
   archivedAt: string | null;
   position: number;
@@ -109,9 +110,16 @@ export interface DocumentAssetRow {
   createdAt: string;
 }
 
+// Which pages `userId` may see. An organization admin sees every page except other
+// members' personal pages; everyone else sees public pages and their own private ones.
 async function documentAccess(userId: string) {
-  if (await isOrganizationAdmin(userId)) return undefined;
+  if (await isOrganizationAdmin(userId))
+    return or(eq(projectDocument.personal, false), eq(projectDocument.ownerUserId, userId));
   return or(eq(projectDocument.isPrivate, false), eq(projectDocument.ownerUserId, userId));
+}
+
+function assertNotPersonal(row: { personal: boolean }) {
+  if (row.personal) throw new HttpError(400, 'A personal page cannot be changed this way.');
 }
 
 function mapDocument(row: typeof projectDocument.$inferSelect, isFavorite = false): DocumentRow {
@@ -440,12 +448,14 @@ async function assertValidParent(
         projectId: projectDocument.projectId,
         parentId: projectDocument.parentId,
         archivedAt: projectDocument.archivedAt,
+        personal: projectDocument.personal,
       })
       .from(projectDocument)
       .where(and(eq(projectDocument.id, cursor), await documentAccess(userId)));
     if (!parent || parent.projectId !== projectId) {
       throw new HttpError(400, 'Parent document must belong to the same project');
     }
+    if (parent.personal) throw new HttpError(400, 'A page cannot be nested inside a personal page');
     if (parent.archivedAt !== null) {
       throw new HttpError(400, 'An archived document cannot be used as a parent');
     }
@@ -983,6 +993,9 @@ export async function updateDocument(
     assertExpectedVersion(current, input.version);
     assertActive(current);
     assertUnlocked(current);
+    if (current.personal && input.parentId != null) {
+      throw new HttpError(400, 'A personal page stays at the top level');
+    }
     if (input.parentId !== undefined) {
       await assertValidParent(tx, projectId, documentId, input.parentId, userId);
     }
@@ -1090,6 +1103,7 @@ export async function setDocumentAccess(
     await lockDocumentActors(tx, [userId, visible.ownerUserId]);
     const current = await ownedDocument(tx, projectId, documentId, userId, false);
     if (!current) return null;
+    assertNotPersonal(current);
     assertExpectedVersion(current, version);
     assertActive(current);
     if (current.isPrivate === isPrivate) return mapDocumentForUser(tx, current, userId);
@@ -1125,6 +1139,7 @@ export async function transferDocumentOwnership(
     await lockDocumentActors(tx, [userId, visible.ownerUserId, ownerUserId]);
     const current = await ownedDocument(tx, projectId, documentId, userId, isProjectOwner);
     if (!current) return null;
+    assertNotPersonal(current);
     assertExpectedVersion(current, version);
     const [target] = await tx
       .select({ userId: projectMember.userId })
@@ -1163,6 +1178,7 @@ export async function setDocumentLocked(
     await lockDocumentActors(tx, [userId, visible.ownerUserId]);
     const current = await ownedDocument(tx, projectId, documentId, userId, isProjectOwner);
     if (!current) return null;
+    assertNotPersonal(current);
     assertExpectedVersion(current, version);
     assertActive(current);
     if (current.isLocked === isLocked) return mapDocumentForUser(tx, current, userId);
@@ -1224,6 +1240,7 @@ export async function archiveDocument(
     );
     const current = await ownedDocument(tx, projectId, documentId, userId, isProjectOwner);
     if (!current) return null;
+    assertNotPersonal(current);
     assertExpectedVersion(current, version);
     assertActive(current);
     assertUnlocked(current);
@@ -1361,6 +1378,7 @@ export async function duplicateDocument(input: {
       );
       const source = await selectDocument(tx, input.projectId, input.documentId, input.userId);
       if (!source) return null;
+      assertNotPersonal(source);
       assertExpectedVersion(source, input.version);
       assertValidDocumentContentJson(source.contentJson);
       const parentId =

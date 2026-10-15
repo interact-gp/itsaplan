@@ -128,6 +128,28 @@ export interface InstanceTelegramSettingsPatch {
   botToken?: string;
 }
 
+// The Slack digest of pending work. It runs only while `enabled` is on, at the times
+// `cron` names in `timezone`; `nextRunAt` is the next one.
+export interface SlackReminderSettings {
+  enabled: boolean;
+  cron: string;
+  timezone: string;
+  nextRunAt: string | null;
+  slackConfigured: boolean;
+}
+
+export interface SlackReminderSettingsInput {
+  enabled: boolean;
+  cron: string;
+  timezone: string;
+}
+
+// What happened to the test digest: sent, skipped with a reason, or left for a retry.
+export interface SlackReminderTestResult {
+  status: string;
+  outcome: string;
+}
+
 // One account in the instance user directory. `role` is the global better-auth role
 // ("god" for the instance owner), which is unrelated to project membership.
 export interface InstanceUser {
@@ -253,6 +275,18 @@ export const updateInstanceTelegramSettings = (patch: InstanceTelegramSettingsPa
     method: 'PUT',
     body: JSON.stringify(patch),
   });
+
+export const getSlackReminderSettings = () =>
+  request<SlackReminderSettings>('/god/slack-reminders');
+
+export const updateSlackReminderSettings = (input: SlackReminderSettingsInput) =>
+  request<SlackReminderSettings>('/god/slack-reminders', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+
+export const sendSlackReminderTest = () =>
+  request<SlackReminderTestResult>('/god/slack-reminders/test', { method: 'POST' });
 
 export const getInstanceHotkeySettings = () => request<HotkeyOverrides>('/god/hotkey-settings');
 

@@ -15,6 +15,18 @@ export function escapeSlack(text: string) {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
+// A refused Slack call. `code` is Slack's error code (or the HTTP status), and
+// `retryAfterSeconds` is set when Slack asked the caller to slow down.
+export class SlackApiError extends Error {
+  constructor(
+    method: string,
+    readonly code: string,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(`Slack ${method} failed: ${code}`);
+  }
+}
+
 async function call(method: string, args: Record<string, string>) {
   const response = await fetch(`https://slack.com/api/${method}`, {
     method: 'POST',
@@ -25,10 +37,27 @@ async function call(method: string, args: Record<string, string>) {
     body: new URLSearchParams(args),
     signal: AbortSignal.timeout(10_000),
   });
+  if (response.status === 429) {
+    const seconds = Number(response.headers.get('retry-after'));
+    throw new SlackApiError(method, 'ratelimited', Number.isFinite(seconds) ? seconds : 60);
+  }
   const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body?.ok)
-    throw new Error(`Slack ${method} failed: ${String(body?.error ?? response.status)}`);
+  if (!body?.ok) throw new SlackApiError(method, String(body?.error ?? response.status));
   return body;
+}
+
+// The Slack user with this email in the bot's workspace, or null when there is none.
+export async function slackUserByEmail(
+  email: string,
+): Promise<{ id: string; teamId?: string; deleted?: boolean; isBot?: boolean } | null> {
+  try {
+    const body = await call('users.lookupByEmail', { email });
+    const user = body.user as { id: string; team_id?: string; deleted?: boolean; is_bot?: boolean };
+    return { id: user.id, teamId: user.team_id, deleted: user.deleted, isBot: user.is_bot };
+  } catch (error) {
+    if (error instanceof SlackApiError && error.code === 'users_not_found') return null;
+    throw error;
+  }
 }
 
 export async function slackProfile(slackUserId: string): Promise<SlackProfile> {

@@ -220,6 +220,21 @@
     "botTokenHint": "Token diverifikasi dengan Telegram saat Anda menyimpan, jadi token yang salah akan ditolak di sini daripada gagal tanpa peringatan nanti.",
     "resolvedHint": "Diresolusi dari token. Ini adalah bot yang akan dilihat pengguna saat menghubungkan."
   },
+  "slackReminders": {
+    "saved": "Jadwal pengingat disimpan",
+    "schedule": "Jadwal",
+    "scheduleHint": "Setiap orang menerima pesan Slack pribadi berisi item Tugas saya yang belum dicentang dan pekerjaan terbuka yang ditugaskan. Setiap orang dapat mematikannya di preferensi.",
+    "slackMissing": "Bot Slack belum disiapkan di server ini. Atur SLACK_BOT_TOKEN dan SLACK_TEAM_ID terlebih dahulu.",
+    "cron": "Jadwal cron",
+    "cronHint": "Lima kolom: menit, jam, tanggal, bulan, hari dalam minggu. Paling sering sekali per jam.",
+    "timezone": "Zona waktu",
+    "nextRun": "Jalan berikutnya: {when}",
+    "off": "Pengingat mati. Tidak ada yang dikirim sesuai jadwal.",
+    "privacy": "Setiap pesan hanya dikirim ke DM Slack orang tersebut. Slack menyimpannya sesuai kebijakan retensi workspace.",
+    "sendTest": "Kirim tes ke saya",
+    "testSent": "Tes terkirim ke DM Slack Anda",
+    "testNotSent": "Tidak ada yang terkirim: {outcome}"
+  },
   "email": {
     "saved": "Penyedia email disimpan",
     "provider": "Penyedia email",

@@ -146,6 +146,8 @@
     },
     "autoWatch": "Watch issues automatically",
     "autoWatchDescription": "The ones you create, get assigned, comment on, or are mentioned in.",
+    "slackReminders": "Slack reminders",
+    "slackRemindersDescription": "A private Slack message with your unticked My To-do items and the open work assigned to you, sent when the reminder schedule runs.",
     "showChatByDefault": "Show the chat by default",
     "showChatByDefaultDescription": "The chat panel opens with a project page. Close it any time from its header or the chat icon."
   }

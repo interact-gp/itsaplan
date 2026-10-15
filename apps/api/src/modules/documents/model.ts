@@ -27,6 +27,7 @@ const DocumentSummaryResponse = t.Object({
   fullWidth: t.Boolean(),
   isPrivate: t.Boolean(),
   isLocked: t.Boolean(),
+  personal: t.Boolean(),
   isFavorite: t.Boolean(),
   archivedAt: t.Nullable(t.String()),
   position: t.Number(),

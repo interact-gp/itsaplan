@@ -43,6 +43,10 @@
       "label": "Telegram",
       "description": "The bot people connect their Telegram account to, and the one that delivers Telegram notifications for projects that set no bot of their own."
     },
+    "slack-reminders": {
+      "label": "Slack reminders",
+      "description": "The schedule of the private Slack message that lists each person's pending work."
+    },
     "email": {
       "label": "Email provider",
       "description": "The mail provider the instance sends through: password resets, address confirmation, and sign-in links."

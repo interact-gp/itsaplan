@@ -36,6 +36,8 @@ export interface AccountPreferences {
   // Whether the user is subscribed to the issues they create, are assigned, comment
   // on or are mentioned in. Off means they only ever subscribe by hand.
   autoWatch: boolean;
+  // Whether the scheduled Slack digest of pending work is sent to this user.
+  slackReminders: boolean;
   lastProjectId: number | null;
   // The keyboard shortcuts this user rebound, as { commandId: combo }. Only the
   // changed ones; the rest come from the instance settings, then the built-in

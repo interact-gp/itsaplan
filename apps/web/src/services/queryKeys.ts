@@ -246,6 +246,8 @@ export const qk = {
   // The signed-in user's interface preferences (timezone, theme, issue open mode,
   // start page). Read app-wide, not just on the preferences page.
   accountPreferences: ['accountPreferences'] as const,
+  // The signed-in user's own "My To-do" page.
+  personalPage: ['personalPage'] as const,
   // Instance administration (god mode): the sign-in policy, the mail provider, the
   // sign-in providers, SCIM provisioning and the Telegram bot. Not scoped to a project.
   instanceAuthSettings: ['instanceAuthSettings'] as const,
@@ -255,6 +257,7 @@ export const qk = {
   instanceScimSettings: ['instanceScimSettings'] as const,
   instanceScimGroups: ['instanceScimGroups'] as const,
   instanceTelegramSettings: ['instanceTelegramSettings'] as const,
+  slackReminderSettings: ['slackReminderSettings'] as const,
   instanceProjectDefaults: ['instanceProjectDefaults'] as const,
   instanceStorageSettings: ['instanceStorageSettings'] as const,
   // The upload limits as read by the upload UI (open to any signed-in user).

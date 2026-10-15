@@ -2,6 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { agentTeam } from '#modules/agents/core/service';
 import { listTeams } from '#modules/teams/service';
+import { personalWorkspace } from '#modules/personal-pages/workspace';
 import type { McpApp } from './types';
 import { routeTools, withoutFields, type McpRouteTool } from './generate';
 import { dispatchTool } from './dispatch';
@@ -26,7 +27,10 @@ const TEAM_PARAM = 'teamId';
 async function callerTeam(userId: string): Promise<number | null> {
   const ofAgent = await agentTeam(userId);
   if (ofAgent !== null) return ofAgent;
-  const teams = await listTeams(userId, { mcpOnly: true });
+  // Every member is in the Personal Notes team, which holds nothing to work on through
+  // a team, so it does not count when choosing the caller's one team.
+  const { teamId: personal } = await personalWorkspace();
+  const teams = (await listTeams(userId, { mcpOnly: true })).filter((t) => t.id !== personal);
   return teams.length === 1 ? teams[0].id : null;
 }
 

@@ -156,11 +156,13 @@ export default function DocumentEditorHeader({
           disabled={busy}
           onChange={onFavoriteChange}
         />
-        <DocumentLockButton
-          locked={document.isLocked}
-          disabled={!canManage || document.archivedAt !== null || busy}
-          onChange={onLockChange}
-        />
+        {!document.personal && (
+          <DocumentLockButton
+            locked={document.isLocked}
+            disabled={!canManage || document.archivedAt !== null || busy}
+            onChange={onLockChange}
+          />
+        )}
         <DocumentCopyLinkButton />
         <div className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
         <Button

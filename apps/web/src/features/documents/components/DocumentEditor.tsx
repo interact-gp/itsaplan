@@ -78,10 +78,14 @@ export default function DocumentEditor({
     canEdit && currentUserId !== null && !document.isLocked && document.archivedAt === null;
   const editorEditable = editable && !documentAction.pending;
   const canManage =
-    canEdit && currentUserId !== null && (isProjectOwner || document.ownerUserId === currentUserId);
+    canEdit &&
+    currentUserId !== null &&
+    !document.personal &&
+    (isProjectOwner || document.ownerUserId === currentUserId);
   const canManageLifecycle =
     canDelete &&
     currentUserId !== null &&
+    !document.personal &&
     (isProjectOwner || document.ownerUserId === currentUserId);
   const { stickyToolbar, setStickyToolbar } = useDocumentEditorPreferences();
   const updateDocument = useUpdateDocument(projectKey);
@@ -171,7 +175,7 @@ export default function DocumentEditor({
           saveState={saveState}
           dirty={dirty}
           stickyToolbar={stickyToolbar}
-          canCreate={canCreate}
+          canCreate={canCreate && !document.personal}
           canUpdate={editable}
           canManage={canManage}
           canManageLifecycle={canManageLifecycle}

@@ -170,6 +170,16 @@ export default function AccountPreferencesPage() {
             disabled={disabled}
           />
         </AccountPreferenceRow>
+        <AccountPreferenceRow
+          label={t('slackReminders')}
+          description={t('slackRemindersDescription')}
+        >
+          <Switch
+            checked={prefs.slackReminders}
+            onCheckedChange={(slackReminders) => save({ slackReminders })}
+            disabled={disabled}
+          />
+        </AccountPreferenceRow>
       </AccountPreferencesSection>
 
       <AccountPreferencesSection id="ai-chat" title={t('sections.aiChat')}>

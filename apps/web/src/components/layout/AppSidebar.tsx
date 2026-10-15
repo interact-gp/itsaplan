@@ -1,14 +1,15 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Braces, Server, Shield } from 'lucide-react';
+import { Braces, ListChecks, Server, Shield } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/api/endpoints/projects';
 import { useInstanceAdmin } from '@/hooks/useInstanceAdmin';
-import { apiDocsPath, godPath, mcpServerPath } from '@/utils/paths';
+import { apiDocsPath, documentPath, godPath, mcpServerPath } from '@/utils/paths';
 import { GOD_SECTIONS } from '@/utils/godSections';
 import { useSettingsNavGroups } from '@/hooks/useSettingsNavGroups';
 import { useSidebarSide } from '@/hooks/useSidebarSide';
+import { usePersonalPageQuery } from '@/services/personalPage.service';
 import {
   Sidebar,
   SidebarContent,
@@ -55,6 +56,10 @@ export default function AppSidebar({
   const onApiDocs = pathname.endsWith('/api');
   const onMcp = pathname.endsWith('/mcp');
   const side = useSidebarSide();
+  const { data: personalPage } = usePersonalPageQuery();
+  const myTodoHref = personalPage
+    ? documentPath(personalPage.projectKey, personalPage.documentId)
+    : null;
 
   return (
     <Sidebar collapsible="icon" side={side}>
@@ -79,6 +84,15 @@ export default function AppSidebar({
         {!settingsMode && (
           <>
             <SidebarMenu>
+              {myTodoHref && (
+                <SidebarNavItem
+                  href={myTodoHref}
+                  icon={ListChecks}
+                  label={t('myTodo')}
+                  active={pathname === myTodoHref}
+                  disabled={false}
+                />
+              )}
               <SidebarNavItem
                 href={currentProjectKey ? apiDocsPath(currentProjectKey) : '#'}
                 icon={Braces}

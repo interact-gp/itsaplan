@@ -146,6 +146,8 @@
     },
     "autoWatch": "Seguir tickets automáticamente",
     "autoWatchDescription": "Las que creas, te asignen, comentes o en las que te mencionen.",
+    "slackReminders": "Recordatorios de Slack",
+    "slackRemindersDescription": "Un mensaje privado de Slack con tus tareas sin marcar de Mis tareas y el trabajo abierto asignado a ti, enviado cuando se ejecuta el programa de recordatorios.",
     "showChatByDefault": "Mostrar el chat por defecto",
     "showChatByDefaultDescription": "El panel de chat se abre con una página de proyecto. Ciérralo cuando quiera desde su cabecera o el icono de chat."
   }
