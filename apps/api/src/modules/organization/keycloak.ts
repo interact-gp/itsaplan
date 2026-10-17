@@ -60,6 +60,27 @@ async function adminClient() {
   };
 }
 
+async function applicationGroups(request: Awaited<ReturnType<typeof adminClient>>) {
+  const ids = {
+    admin: process.env.ITSAPLAN_KEYCLOAK_ADMIN_GROUP_ID?.trim(),
+    member: process.env.ITSAPLAN_KEYCLOAK_MEMBER_GROUP_ID?.trim(),
+  };
+  if (Boolean(ids.admin) !== Boolean(ids.member))
+    throw new Error('Configure both Keycloak application group IDs or neither');
+  const groups = {} as Record<keyof typeof organizationGroups, { id: string; path: string }>;
+  for (const rank of ['admin', 'member'] as const) {
+    const path = organizationGroups[rank];
+    const id = ids[rank];
+    const group = await request<{ id: string; path: string }>(
+      id ? `/groups/${encodeURIComponent(id)}` : `/group-by-path${path}`,
+    );
+    if (!group.id || group.path !== path || (id && group.id !== id))
+      throw new Error(`Keycloak ${rank} group does not match its configured identity and path`);
+    groups[rank] = group;
+  }
+  return groups;
+}
+
 interface Person {
   id: string;
   email: string;
@@ -90,8 +111,8 @@ async function synchronize() {
   if (!managedAccess()) return;
   const request = await adminClient();
   const desired = new Map<string, { person: Person; groups: string[] }>();
-  for (const path of Object.values(organizationGroups)) {
-    const group = await request<{ id: string }>(`/group-by-path${path}`);
+  const groups = await applicationGroups(request);
+  for (const group of Object.values(groups)) {
     for (let offset = 0; ; offset += 100) {
       const people: Person[] = await request<Person[]>(
         `/groups/${group.id}/members?first=${offset}&max=100`,
@@ -104,7 +125,7 @@ async function synchronize() {
         )
           continue;
         const entry = desired.get(person.id) ?? { person, groups: [] };
-        entry.groups.push(path);
+        entry.groups.push(group.path);
         desired.set(person.id, entry);
       }
       if (people.length < 100) break;
@@ -242,11 +263,11 @@ async function changeApplicationAccess(
       or(eq(user.scimExternalId, people[0].id), eq(user.email, people[0].email.toLowerCase())),
     );
   if (owner?.role === 'god') throw new HttpError(409, 'The instance owner cannot be provisioned');
-  const adminGroup = await request<{ id: string }>(`/group-by-path${organizationGroups.admin}`);
+  const groups = await applicationGroups(request);
   const admins: Person[] = [];
   for (let offset = 0; ; offset += 100) {
     const page = await request<Person[]>(
-      `/groups/${adminGroup.id}/members?first=${offset}&max=100`,
+      `/groups/${groups.admin.id}/members?first=${offset}&max=100`,
     );
     admins.push(
       ...page.filter(
@@ -262,8 +283,7 @@ async function changeApplicationAccess(
     throw new HttpError(409, 'The last organization admin cannot be removed');
   }
   await setSetting('organization.lastSync', 0);
-  for (const [rank, path] of Object.entries(organizationGroups)) {
-    const group = await request<{ id: string }>(`/group-by-path${path}`);
+  for (const [rank, group] of Object.entries(groups)) {
     await request(`/users/${people[0].id}/groups/${group.id}`, rank === role ? 'PUT' : 'DELETE');
   }
   await synchronize();

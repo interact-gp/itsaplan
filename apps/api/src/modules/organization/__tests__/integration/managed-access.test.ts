@@ -60,6 +60,8 @@ describe('managed organization access', () => {
     ITSAPLAN_KEYCLOAK_ISSUER: 'https://keycloak.invalid/realms/test',
     ITSAPLAN_KEYCLOAK_CLIENT_ID: 'test-client',
     ITSAPLAN_KEYCLOAK_CLIENT_SECRET: 'test-secret',
+    ITSAPLAN_KEYCLOAK_ADMIN_GROUP_ID: '',
+    ITSAPLAN_KEYCLOAK_MEMBER_GROUP_ID: '',
   };
   const originalKeycloakEnv = Object.fromEntries(
     Object.keys(keycloakEnv).map((key) => [key, process.env[key]]),
@@ -486,7 +488,11 @@ describe('managed organization access', () => {
     const fixtureFetch = async (input: string | URL | Request) => {
       const path = new URL(String(input)).pathname;
       if (path.endsWith('/token')) return Response.json({ access_token: 'fixture-token' });
-      if (path.includes('/group-by-path/')) return Response.json({ id: path.split('/').pop() });
+      if (path.includes('/group-by-path/'))
+        return Response.json({
+          id: path.split('/').pop(),
+          path: path.replace('/admin/realms/test/group-by-path', ''),
+        });
       if (path.endsWith('/groups/admin/members')) return Response.json([]);
       if (path.endsWith('/groups/member/members'))
         return Response.json([
@@ -558,7 +564,11 @@ describe('managed organization access', () => {
     const fixtureFetch = async (input: string | URL | Request) => {
       const path = new URL(String(input)).pathname;
       if (path.endsWith('/token')) return Response.json({ access_token: 'fixture-token' });
-      if (path.includes('/group-by-path/')) return Response.json({ id: path.split('/').pop() });
+      if (path.includes('/group-by-path/'))
+        return Response.json({
+          id: path.split('/').pop(),
+          path: path.replace('/admin/realms/test/group-by-path', ''),
+        });
       if (path.endsWith('/groups/admin/members')) return Response.json([]);
       if (path.endsWith('/groups/member/members')) return Response.json(members);
       throw new Error('Unexpected fixture request');
@@ -584,6 +594,111 @@ describe('managed organization access', () => {
           .from(teamMember)
           .where(and(eq(teamMember.teamId, teamId), eq(teamMember.userId, member.userId))),
       ).toHaveLength(1);
+    } finally {
+      mock.mockRestore();
+    }
+  });
+  it('uses pinned groups for sync and access changes when path lookup is unavailable', async () => {
+    const { admin, member, adminApi, memberApi } = await actors();
+    for (const [person, sub] of [
+      [admin, 'admin-sub'],
+      [member, 'member-sub'],
+    ] as const)
+      await db
+        .update(user)
+        .set({ scimExternalId: sub, emailVerified: true })
+        .where(eq(user.id, person.userId));
+    await setSetting('organization.subjects', ['admin-sub', 'member-sub']);
+    const teamId = (await adminApi.teams.post({ name: 'Preserved team' })).data!.id;
+    await adminApi.teams({ teamId }).members.post({ email: member.email, role: 'member' });
+    process.env.ITSAPLAN_KEYCLOAK_ADMIN_GROUP_ID = 'admin-id';
+    process.env.ITSAPLAN_KEYCLOAK_MEMBER_GROUP_ID = 'member-id';
+    const person = (id: string, email: string) => ({
+      id,
+      email,
+      enabled: true,
+      emailVerified: true,
+    });
+    const target = person('member-sub', member.email);
+    const members = new Map([
+      ['admin-id', [person('admin-sub', admin.email)]],
+      ['member-id', [target]],
+    ]);
+    const calls: string[] = [];
+    let invalidGroup: 'path' | 'id' | 'missing' | null = null;
+    const fixtureFetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const path = url.pathname.replace('/admin/realms/test', '');
+      const method = init?.method ?? 'GET';
+      calls.push(`${method} ${path}`);
+      if (path.endsWith('/token')) return Response.json({ access_token: 'fixture-token' });
+      if (path.startsWith('/group-by-path')) return new Response(null, { status: 404 });
+      if (path === '/users') return Response.json([target]);
+      for (const rank of ['admin', 'member'] as const) {
+        const id = `${rank}-id`;
+        if (path === `/groups/${id}`) {
+          if (rank === 'member' && invalidGroup === 'missing')
+            return new Response(null, { status: 404 });
+          return Response.json({
+            id: rank === 'member' && invalidGroup === 'id' ? 'wrong-id' : id,
+            path:
+              rank === 'member' && invalidGroup === 'path'
+                ? organizationGroups.admin
+                : organizationGroups[rank],
+          });
+        }
+        if (path === `/groups/${id}/members`) return Response.json(members.get(id));
+        if (path === `/users/member-sub/groups/${id}`) {
+          members.set(
+            id,
+            members.get(id)!.filter((entry) => entry.id !== target.id),
+          );
+          if (method === 'PUT') members.get(id)!.push(target);
+          return new Response(null, { status: 204 });
+        }
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    };
+    const mock = spyOn(globalThis, 'fetch').mockImplementation(
+      Object.assign(fixtureFetch, { preconnect: globalThis.fetch.preconnect }),
+    );
+    try {
+      const key = await keyFor(member.userId);
+      await syncKeycloakAccess();
+      expect((await memberApi.teams.get()).data).toContainEqual(
+        expect.objectContaining({ id: teamId }),
+      );
+      expect((await rpc(key, 'tools/list')).status).toBe(200);
+      for (const failure of ['path', 'id', 'missing'] as const) {
+        invalidGroup = failure;
+        await expect(syncKeycloakAccess()).rejects.toThrow();
+        await expect(setApplicationAccess(member.email, 'admin', admin.userId)).rejects.toThrow();
+        expect(await organizationAccess(member.userId)).toEqual({ enabled: true, admin: false });
+        expect(await organizationAccess(admin.userId)).toEqual({ enabled: true, admin: true });
+        expect(calls.some((call) => call.startsWith('PUT ') || call.startsWith('DELETE '))).toBe(
+          false,
+        );
+      }
+      invalidGroup = null;
+      delete process.env.ITSAPLAN_KEYCLOAK_MEMBER_GROUP_ID;
+      await expect(syncKeycloakAccess()).rejects.toThrow('Configure both');
+      process.env.ITSAPLAN_KEYCLOAK_MEMBER_GROUP_ID = 'member-id';
+      await setApplicationAccess(member.email, 'admin', admin.userId);
+      expect(await organizationAccess(member.userId)).toEqual({ enabled: true, admin: true });
+      members.set('admin-id', [target]);
+      await expect(setApplicationAccess(member.email, 'none', admin.userId)).rejects.toMatchObject({
+        status: 409,
+      });
+      members.set('admin-id', [person('admin-sub', admin.email), target]);
+      await setApplicationAccess(member.email, 'none', admin.userId);
+      expect((await memberApi.teams.get()).status).toBe(401);
+      expect((await rpc(key, 'tools/list')).status).toBe(401);
+      await setApplicationAccess(member.email, 'member', admin.userId);
+      expect((await memberApi.teams.get()).data).toContainEqual(
+        expect.objectContaining({ id: teamId }),
+      );
+      expect((await rpc(key, 'tools/list')).status).toBe(200);
+      expect(calls.some((call) => call.includes('/group-by-path'))).toBe(false);
     } finally {
       mock.mockRestore();
     }
